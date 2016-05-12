@@ -12,9 +12,10 @@ object Main {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
-    val stream = env.fromElements(1,2,3,4,5)
+    val stream = env.fromElements((1,1),(2,1),(3,1),(4,1),(5,1))
+      .assignAscendingTimestamps(p => System.currentTimeMillis)
 
-    stream.keyBy(1)
+    stream.keyBy(0)
       .timeWindow(Time.of(5, TimeUnit.MINUTES), Time.of(1, TimeUnit.MINUTES))
       .sum(1)
       .print()
