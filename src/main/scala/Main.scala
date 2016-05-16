@@ -36,16 +36,18 @@ object Main {
       }
 
       override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-        return TriggerResult.FIRE
+        TriggerResult.FIRE
 
       override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-        return TriggerResult.FIRE
+        TriggerResult.FIRE
     }
 
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
       .trigger(trigger2)
-      .sum(1)
+//      .sum(1)
+//        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
+        .max(0)
       .print()
 
 
