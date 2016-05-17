@@ -1,12 +1,16 @@
 import java.util.concurrent.TimeUnit
 
+import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.scala._
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
+import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
 import org.apache.flink.streaming.api.windowing.triggers.{EventTimeTrigger, Trigger, TriggerResult}
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
+import org.apache.flink.util.Collector
 
 object Main {
 
@@ -42,12 +46,41 @@ object Main {
         TriggerResult.FIRE
     }
 
+
+    val numRecords = new IntCounter();
+
+    val accumulator = new SimpleAccumulator[(Int, Int)] {
+      override def getLocalValue: (Int, Int) = ???
+
+      override def resetLocal(): Unit = ???
+
+      override def merge(other: Accumulator[(Int, Int), (Int, Int)]): Unit = ???
+
+      override def add(value: (Int, Int)): Unit = ???
+    }
+
+
+    def myFunction = new RichWindowFunction[(Int, Int), ?, Int, TimeWindow] {
+      override def open(parameters: Configuration)  {
+        super.open(parameters)
+
+        getRuntimeContext().addAccumulator("num-records", numRecords)
+      }
+
+
+    }
+
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
       .trigger(trigger2)
+        .apply(myFunction)
+//      .apply((tuple, timeWindow, iterator, collector: Collector[(Int, Int)]) => {
+//        accumulator.add(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)) )
+//        collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+//      })
 //      .sum(1)
 //        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
-        .max(0)
+//        .max(0)
       .print()
 
 
