@@ -1,6 +1,7 @@
 import java.util.concurrent.TimeUnit
 
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
+import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.TimeCharacteristic
@@ -50,24 +51,35 @@ object Main {
     val numRecords = new IntCounter();
 
     val accumulator = new SimpleAccumulator[(Int, Int)] {
-      override def getLocalValue: (Int, Int) = ???
+      var value = (0, 0)
 
-      override def resetLocal(): Unit = ???
+      override def getLocalValue: (Int, Int) = value
+
+      override def resetLocal(): Unit = value = (0, 0)
 
       override def merge(other: Accumulator[(Int, Int), (Int, Int)]): Unit = ???
 
-      override def add(value: (Int, Int)): Unit = ???
+      override def add(value: (Int, Int)): Unit = this.value = (value._1, this.value._2 + value._2)
     }
 
 
-    def myFunction = new RichWindowFunction[(Int, Int), ?, Int, TimeWindow] {
+    def myFunction = new RichWindowFunction[(Int, Int), (Int, Int), Tuple, TimeWindow] {
       override def open(parameters: Configuration)  {
         super.open(parameters)
 
         getRuntimeContext().addAccumulator("num-records", numRecords)
+        getRuntimeContext().addAccumulator("accumulator",  accumulator)
       }
 
+      override def apply(key: Tuple, window: TimeWindow, input: Iterable[(Int, Int)], out: Collector[(Int, Int)]): Unit
+      = {
+        val newInput = input.drop(numRecords.getLocalValue)
+        numRecords.add(newInput.size)
 
+        val resultInput = newInput.reduce((p1, p2) => (p1._1, p1._2 + p2._2))
+        accumulator.add(resultInput)
+        out.collect(accumulator.getLocalValue)
+      }
     }
 
     stream.keyBy(1)
