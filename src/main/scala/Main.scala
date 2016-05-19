@@ -20,8 +20,17 @@ object Main {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
-    val stream = env.fromElements((1,1),(2,1),(3,1),(4,1),(5,1))
-      .assignAscendingTimestamps(p => System.currentTimeMillis + p._1 * 1000)
+
+    // def makeTuples(n: Int) = (1 to n).map((_, 1))
+    // val stream = env.fromElements(makeTuples(300): _*)
+    //  .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1000)
+
+    val stream = env.socketTextStream("localhost", 9990).map(line => {
+      val Array(p1, p2) = line.split(" ")
+      (p1.toInt, p2.toInt)
+    })
+      .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1000)
+
 
     // The means that it will fire every 10 minutes (in processing time) until the end of the window (event time),
     // and then every 5 minutes (processing time) for late elements up to 20 minutes late. In addition, previous
@@ -85,11 +94,10 @@ object Main {
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
       .trigger(trigger2)
-        .apply(myFunction)
-//      .apply((tuple, timeWindow, iterator, collector: Collector[(Int, Int)]) => {
-//        accumulator.add(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)) )
-//        collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
-//      })
+        // .apply(myFunction)
+      .apply((tuple, timeWindow, iterator, collector: Collector[(Int, Int)]) => {
+        collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+      })
 //      .sum(1)
 //        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
 //        .max(0)
