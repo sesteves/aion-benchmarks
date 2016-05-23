@@ -21,15 +21,16 @@ object Main {
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
 
-    // def makeTuples(n: Int) = (1 to n).map((_, 1))
-    // val stream = env.fromElements(makeTuples(300): _*)
-    //  .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1000)
+    def makeTuples(n: Int) = (1 to n).map((_, 1))
+    val stream = env.fromElements(makeTuples(40000): _*)
+      .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1)
 
-    val stream = env.socketTextStream("localhost", 9990).map(line => {
-      val Array(p1, p2) = line.split(" ")
-      (p1.toInt, p2.toInt)
-    })
-      .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1000)
+
+//    val stream = env.socketTextStream("localhost", 9990).map(line => {
+//      val Array(p1, p2) = line.split(" ")
+//      (p1.toInt, p2.toInt)
+//    })
+//      .assignAscendingTimestamps(p => System.currentTimeMillis() + p._1 * 1000)
 
 
     // The means that it will fire every 10 minutes (in processing time) until the end of the window (event time),
@@ -46,7 +47,7 @@ object Main {
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         count += 1
-        if (count % 2 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
+        if (count % 8 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
       }
 
       override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
