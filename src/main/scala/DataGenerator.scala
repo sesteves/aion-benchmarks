@@ -8,26 +8,28 @@ object DataGenerator {
 
   def main(args: Array[String]): Unit = {
 
-//    if (args.length != 2) {
-//      System.err.println("Usage: DataGenerator <port> <sleepMillis>")
+//    if (args.length != 3) {
+//      System.err.println("Usage: DataGenerator <port> <nrecords> <sleepMillis>")
 //      System.exit(1)
 //    }
-//    // Parse the arguments using a pattern match
-//    val (port, sleepMillis) = (args(0).toInt, args(1).toLong)
+    // Parse the arguments using a pattern match
+//    val (port, nrecords, sleepMillis) = (args(0).toInt, args(1).toInt, args(2).toLong)
 
     val (port, sleepMillis) = (9990, 10)
 
     val serverSocket = new ServerSocket(port)
     println("Listening on port " + port)
 
-    while(true) {
+    val nrecords = Seq(250000, 500000, 750000, 1000000)
+
+    for(i <- 0 to nrecords.size - 1) {
       val socket = serverSocket.accept()
       println("Got a new connection")
 
       val out = new PrintWriter(socket.getOutputStream)
       try {
 
-          (1 to 500000).foreach(_ => out.println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
+          (1 to nrecords(i)).foreach(_ => out.println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
