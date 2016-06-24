@@ -20,18 +20,17 @@ object CollectMemoryStats {
     val processName = "run-main Main"
     // val processName = "DataGenerator"
 
-    var vmDesc: Option[VirtualMachineDescriptor] = None
-    while(vmDesc.isEmpty) {
-      val vmsDesc = VirtualMachine.list()
-      vmDesc = vmsDesc.find(desc => {
-        println(s"name: ${desc.displayName()}, id: ${desc.id()}")
-        desc.displayName().contains(processName)
-      })
-      Thread.sleep(1000)
-    }
+    while (true) {
+      var vmDesc: Option[VirtualMachineDescriptor] = None
+      while (vmDesc.isEmpty) {
+        val vmsDesc = VirtualMachine.list()
+        vmDesc = vmsDesc.find(desc => {
+          println(s"name: ${desc.displayName()}, id: ${desc.id()}")
+          desc.displayName().contains(processName)
+        })
+        Thread.sleep(1000)
+      }
 
-
-    while(true) {
       val fname = "stats-memory-%d.csv".format(System.currentTimeMillis)
       val pw = new PrintWriter(new File(fname))
 
