@@ -11,9 +11,9 @@ libraryDependencies ++= Seq(
 
 // unmanagedJars in Compile += file("lib/vertica_jdk_5.jar")
 
-// fork in run := true
+fork in run := true
 
-// javaOptions in run ++= Seq("-Xms256M", "-Xmx256M", "-XX:MaxPermSize=256M")
+javaOptions in run ++= Seq("-Xms8G", "-Xmx8G", "-XX:MaxPermSize=8G")
 
 // javaOptions in run += "-Djava.library.path=\"./native/\""
 
