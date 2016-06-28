@@ -26,7 +26,12 @@ object Main {
 //      .assignAscendingTimestamps(p => System.currentTimeMillis())
 
 
-    val stream = env.socketTextStream("localhost", 9990).map(line => {
+    val rawStream = env.socketTextStream("localhost", 9990)
+
+    rawStream.map(_ => (1)).keyBy(0).timeWindow(Time.seconds(1)).sum(0).writeAsCsv("records-per-second-" +
+      System.currentTimeMillis())
+
+    val stream = rawStream.map(line => {
       val Array(p1, p2) = line.split(" ")
       (p1, p2.toInt)
     })
