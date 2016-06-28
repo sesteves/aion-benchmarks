@@ -28,7 +28,7 @@ object Main {
 
     val rawStream = env.socketTextStream("localhost", 9990)
 
-    rawStream.map(_ => (1)).keyBy(0).timeWindow(Time.seconds(1)).sum(0).writeAsCsv("records-per-second-" +
+    rawStream.map(_ => (1, null)).keyBy(0).timeWindow(Time.seconds(1)).sum(0).writeAsCsv("records-per-second-" +
       System.currentTimeMillis())
 
     val stream = rawStream.map(line => {
