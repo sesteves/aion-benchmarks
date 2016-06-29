@@ -7,6 +7,7 @@ import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
 import org.apache.flink.streaming.api.windowing.triggers.{EventTimeTrigger, Trigger, TriggerResult}
@@ -28,8 +29,8 @@ object Main {
 
     val rawStream = env.socketTextStream("localhost", 9990)
 
-    rawStream.map(line => Tuple1(1)).keyBy(0).timeWindow(Time.seconds(1)).sum(0).writeAsCsv("records-per-second-" +
-      System.currentTimeMillis())
+    rawStream.map(line => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
+      .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
     val stream = rawStream.map(line => {
       val Array(p1, p2) = line.split(" ")
