@@ -18,6 +18,8 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
+    val filename = args(0)
+
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
@@ -27,7 +29,8 @@ object Main {
 //      .assignAscendingTimestamps(p => System.currentTimeMillis())
 
 
-    val rawStream = env.socketTextStream("localhost", 9990)
+//    val rawStream = env.socketTextStream("localhost", 9990)
+    val rawStream = env.readTextFile(filename)
 
     rawStream.map(line => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
