@@ -10,12 +10,14 @@ object DataDump {
 
   def main(args: Array[String]): Unit = {
 
-    val socket = new Socket(InetAddress.getByName("localhost"), 9990)
-    val pw = new PrintWriter(new File("records.txt" ))
-    lazy val in = new BufferedSource(socket.getInputStream()).getLines()
-    in.foreach(pw.println)
+    for(i <- 1 to 9) {
+      val socket = new Socket(InetAddress.getByName("localhost"), 9990)
+      val pw = new PrintWriter(new File("records-" + i * 100000 + ".txt"))
+      lazy val in = new BufferedSource(socket.getInputStream()).getLines()
+      in.foreach(pw.println)
 
-    pw.close()
-    socket.close()
+      pw.close()
+      socket.close()
+    }
   }
 }
