@@ -1,10 +1,10 @@
+import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
-import org.apache.flink.runtime.state.filesystem.FsStateBackend
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
@@ -115,8 +115,10 @@ object Main {
       //.print()
 
 
+    val result = env.execute()
 
-
-    env.execute()
+    val pw = new PrintWriter(new FileOutputStream(new File("runtime.txt"), true))
+    pw.println(result.getNetRuntime(TimeUnit.SECONDS))
+    pw.close()
   }
 }
