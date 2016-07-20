@@ -5,7 +5,6 @@ import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, Simple
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
-import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
@@ -22,7 +21,7 @@ object Main {
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
-    env.setStateBackend(new MemoryFsStateBackend());
+    // env.setStateBackend(new MemoryFsStateBackend());
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
