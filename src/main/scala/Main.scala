@@ -5,6 +5,7 @@ import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, Simple
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
+import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
@@ -19,9 +20,15 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
+    if (args.length != 2) {
+      System.err.println("Usage: Main <maxTuplesInMemory> <complexity>")
+      System.exit(1)
+    }
+    val (maxTuplesInMemory, complexity) = (args(0).toInt, args(1).toInt)
+
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
-    // env.setStateBackend(new MemoryFsStateBackend());
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
@@ -81,7 +88,6 @@ object Main {
       override def add(value: (Int, Int)): Unit = this.value = (value._1, this.value._2 + value._2)
     }
 
-
     def myFunction = new RichWindowFunction[(Int, Int), (Int, Int), Tuple, TimeWindow] {
       override def open(parameters: Configuration)  {
         super.open(parameters)
@@ -101,13 +107,28 @@ object Main {
       }
     }
 
+    def simpleFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
+                                 collector: Collector[(String, Int)]) =>
+      collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+    def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
+                                 collector: Collector[(String, Int)]) =>
+      collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+    def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
+                                 collector: Collector[(String, Int)]) =>
+      collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+
+
+    def function = complexity match {
+      case 0 => simpleFunction
+      case 1 => fairlyComplexFunction
+      case 2 => complexFunction
+    }
+
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
       //.trigger(trigger2)
         // .apply(myFunction)
-      .apply((tuple, timeWindow, iterator, collector: Collector[(String, Int)]) => {
-        collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
-      })
+        .apply(function)
 //      .sum(1)
 //        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
 //        .max(0)
