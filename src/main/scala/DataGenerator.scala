@@ -20,7 +20,9 @@ object DataGenerator {
     val serverSocket = new ServerSocket(port)
     println("Listening on port " + port)
 
-    val nrecords = Seq(100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000)
+    // val nrecords = Seq(100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000)
+
+    val nrecords = Seq(1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000)
 
     for(i <- 0 to nrecords.size - 1) {
       val socket = serverSocket.accept()
