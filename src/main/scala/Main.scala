@@ -125,7 +125,8 @@ object Main {
       case 2 => complexFunction
     }
 
-    stream.keyBy(1).timeWindow(Time.of(5, TimeUnit.MINUTES))
+    stream.keyBy(1)
+      .timeWindow(Time.of(5, TimeUnit.MINUTES))
       .trigger(trigger2)
         // .apply(myFunction)
         .apply(function)
