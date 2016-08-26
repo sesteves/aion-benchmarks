@@ -43,10 +43,11 @@ object Main {
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
     val stream = rawStream.map(line => {
-      val Array(p1, p2) = line.split(" ")
-      (p1, p2.toInt)
+      val Array(p1, p2, p3) = line.split(" ")
+      (p1, p2.toInt, p3.toLong)
     })
       .assignAscendingTimestamps(p => System.currentTimeMillis())
+      .map(tuple => (tuple._1, tuple._2))
 
 
     // The means that it will fire every 10 minutes (in processing time) until the end of the window (event time),
@@ -63,7 +64,7 @@ object Main {
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         count += 1
-        if (count % 8 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
+        if (count % 100000 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
       }
 
       override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
@@ -124,9 +125,8 @@ object Main {
       case 2 => complexFunction
     }
 
-    stream.keyBy(1)
-      .timeWindow(Time.of(5, TimeUnit.MINUTES))
-      //.trigger(trigger2)
+    stream.keyBy(1).timeWindow(Time.of(5, TimeUnit.MINUTES))
+      .trigger(trigger2)
         // .apply(myFunction)
         .apply(function)
 //      .sum(1)
