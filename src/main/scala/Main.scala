@@ -7,8 +7,10 @@ import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
+import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
+import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
@@ -42,11 +44,21 @@ object Main {
     rawStream.map(line => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
+    val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
+      override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
+      }
+
+      override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long =
+        previousElementTimestamp + 1000
+    }
+
+
     val stream = rawStream.map(line => {
       val Array(p1, p2, p3) = line.split(" ")
       (p1, p2.toInt, p3.toLong)
     })
-      .assignAscendingTimestamps(p => System.currentTimeMillis())
+      .assignTimestampsAndWatermarks(punctuatedAssigner)
+      // .assignAscendingTimestamps(p => System.currentTimeMillis())
       .map(tuple => (tuple._1, tuple._2))
 
 
