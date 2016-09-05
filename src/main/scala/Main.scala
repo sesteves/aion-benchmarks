@@ -6,7 +6,7 @@ import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
-import org.apache.flink.streaming.api.TimeCharacteristic
+import org.apache.flink.streaming.api.{TimeCharacteristic, watermark}
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.{RichWindowFunction, WindowFunction}
@@ -45,11 +45,15 @@ object Main {
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
-      override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
-      }
+      var count = (1000000 * 0.9).toInt
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long =
-        previousElementTimestamp + 1000
+        System.currentTimeMillis()
+
+      override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
+        count -= 1
+        if(count == 0) new watermark.Watermark(extractedTimestamp) else null
+      }
     }
 
 
