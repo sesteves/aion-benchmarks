@@ -3,7 +3,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.api.scala._
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
@@ -12,8 +11,6 @@ import org.apache.flink.streaming.api.scala.function.RichWindowFunction
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
-import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
-import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.api.{TimeCharacteristic, watermark}
 import org.apache.flink.util.Collector
@@ -52,7 +49,8 @@ object Main {
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         count -= 1
-        if(count == 0) new watermark.Watermark(extractedTimestamp) else null
+        val timestamp = extractedTimestamp + TimeUnit.MINUTES.toMillis(6)
+        if(count == 0) new watermark.Watermark(timestamp) else null
       }
     }
 
@@ -75,20 +73,20 @@ object Main {
       .withAllowedLateness(Time.seconds(2))
       .accumulating()
 
-    val trigger2 = new Trigger[Any, TimeWindow] {
-      var count = 0
-
-      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        count += 1
-        if (count % 100000 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
-      }
-
-      override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-        TriggerResult.FIRE
-
-      override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-        TriggerResult.FIRE
-    }
+//    val trigger2 = new Trigger[Any, TimeWindow] {
+//      var count = 0
+//
+//      def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+//        count += 1
+//        if (count % 100000 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
+//      }
+//
+//      def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
+//        TriggerResult.FIRE
+//
+//      def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
+//        TriggerResult.FIRE
+//    }
 
 
     val numRecords = new IntCounter();
@@ -143,7 +141,8 @@ object Main {
 
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
-      .trigger(trigger2)
+      .allowedLateness(Time.of(1, TimeUnit.MINUTES))
+//      .trigger(trigger2)
         // .apply(myFunction)
         .apply(function)
 //      .sum(1)
