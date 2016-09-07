@@ -1,6 +1,7 @@
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
+import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.configuration.Configuration
