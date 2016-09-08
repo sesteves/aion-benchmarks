@@ -44,9 +44,10 @@ object Main {
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
       var count = (1000000 * 0.9).toInt
+      val timestamp = System.currentTimeMillis()
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long =
-        System.currentTimeMillis()
+        timestamp
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         count -= 1
