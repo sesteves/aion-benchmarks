@@ -43,16 +43,18 @@ object Main {
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
-      var count = (1000000 * 0.9).toInt
       val timestamp = System.currentTimeMillis()
+      var watermarkEmitted = false
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long =
         timestamp
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
-        count -= 1
         val timestamp = extractedTimestamp + TimeUnit.MINUTES.toMillis(6)
-        if(count == 0) new watermark.Watermark(timestamp) else null
+        if(!watermarkEmitted && lastElement._3 > 900000) {
+          watermarkEmitted = true
+          new watermark.Watermark(timestamp)
+        } else null
       }
     }
 
