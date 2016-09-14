@@ -50,9 +50,9 @@ object Main {
         timestamp
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
-        val timestamp = extractedTimestamp + TimeUnit.MINUTES.toMillis(6)
         if(!watermarkEmitted && lastElement._3 > 900000) {
           watermarkEmitted = true
+          val timestamp = extractedTimestamp + TimeUnit.MINUTES.toMillis(5)
           new watermark.Watermark(timestamp)
         } else null
       }
