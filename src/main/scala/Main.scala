@@ -3,11 +3,10 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
-import org.apache.flink.api.common.state.ValueState
+import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
-import org.apache.flink.runtime.state.memory.MemValueState
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.RichWindowFunction
@@ -96,23 +95,18 @@ object Main {
 //    }
 
 
-    val counter = new ValueState[Long] {
-      var count = 0l
-
-      override def update(t: Long): Unit = count = t
-
-      override def value(): Long = count
-
-      override def clear(): Unit = count = 0
-    }
 
     val trigger3 = new Trigger[Any, TimeWindow] {
+
+      // val countDescriptor = new ValueStateDescriptor[Long]("COUNTER", Long.getClass, 0l)
+
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         // compute the cleanup time and store it in a ValueState (so you have to pass the allowedLateness somehow)
 
-        counter.update(counter.value() + 1)
+        val count = triggerContext.getPartitionedState(countDescriptor)
+        count.update(count.value() + 1)
 
-        if(counter.value() == 1000000) {
+        if(count.value() == 1000000) {
           println("### Firing!!!")
           TriggerResult.FIRE_AND_PURGE
         } else {
@@ -123,13 +117,11 @@ object Main {
       override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = ???
 
       override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        // check if the time is the cleanup time (stored in the valueState) and if yes, FIRE if not CONTINUE
         TriggerResult.CONTINUE
       }
-
     }
 
-    val numRecords = new IntCounter();
+    val numRecords = new IntCounter()
 
     val accumulator = new SimpleAccumulator[(Int, Int)] {
       var value = (0, 0)
@@ -166,8 +158,10 @@ object Main {
                                  collector: Collector[(String, Int)]) =>
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
-                                 collector: Collector[(String, Int)]) =>
+                                 collector: Collector[(String, Int)]) => {
+      println("### Iterator size: " + iterator.size)
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+    }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) =>
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
