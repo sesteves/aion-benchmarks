@@ -3,15 +3,19 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
+import org.apache.flink.api.common.state.ValueState
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
+import org.apache.flink.runtime.state.memory.MemValueState
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.scala.function.RichWindowFunction
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
+import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
+import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.api.{TimeCharacteristic, watermark}
 import org.apache.flink.util.Collector
@@ -67,7 +71,6 @@ object Main {
       // .assignAscendingTimestamps(p => System.currentTimeMillis())
       .map(tuple => (tuple._1, tuple._2))
 
-
     // The means that it will fire every 10 minutes (in processing time) until the end of the window (event time),
     // and then every 5 minutes (processing time) for late elements up to 20 minutes late. In addition, previous
     // elements are not discarded.
@@ -92,6 +95,39 @@ object Main {
 //        TriggerResult.FIRE
 //    }
 
+
+    val counter = new ValueState[Long] {
+      var count = 0l
+
+      override def update(t: Long): Unit = count = t
+
+      override def value(): Long = count
+
+      override def clear(): Unit = count = 0
+    }
+
+    val trigger3 = new Trigger[Any, TimeWindow] {
+      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        // compute the cleanup time and store it in a ValueState (so you have to pass the allowedLateness somehow)
+
+        counter.update(counter.value() + 1)
+
+        if(counter.value() == 1000000) {
+          println("### Firing!!!")
+          TriggerResult.FIRE_AND_PURGE
+        } else {
+          TriggerResult.CONTINUE
+        }
+      }
+
+      override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = ???
+
+      override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        // check if the time is the cleanup time (stored in the valueState) and if yes, FIRE if not CONTINUE
+        TriggerResult.CONTINUE
+      }
+
+    }
 
     val numRecords = new IntCounter();
 
@@ -146,6 +182,7 @@ object Main {
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
       .allowedLateness(Time.of(1, TimeUnit.MINUTES))
+      .trigger(trigger3)
 //      .trigger(trigger2)
         // .apply(myFunction)
         .apply(function)
