@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.common.state.ValueStateDescriptor
+import org.apache.flink.api.common.typeutils.base.BooleanSerializer
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
@@ -49,8 +50,7 @@ object Main {
       val timestamp = System.currentTimeMillis()
       var watermarkEmitted = false
 
-      override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long =
-        timestamp
+      override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = timestamp
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         if(!watermarkEmitted && lastElement._3 > 900000) {
@@ -95,29 +95,42 @@ object Main {
 //    }
 
 
-
     val trigger3 = new Trigger[Any, TimeWindow] {
+      //val countDescriptor = new ValueStateDescriptor[Long]("COUNTER", Long.getClass, 0l)
 
-      // val countDescriptor = new ValueStateDescriptor[Long]("COUNTER", Long.getClass, 0l)
+      val isWatermarkEmmitedDescriptor =
+        new ValueStateDescriptor[java.lang.Boolean]("WATERMARK_EMMITED", classOf[java.lang.Boolean], false)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         // compute the cleanup time and store it in a ValueState (so you have to pass the allowedLateness somehow)
 
-        val count = triggerContext.getPartitionedState(countDescriptor)
-        count.update(count.value() + 1)
+        // val count = triggerContext.getPartitionedState(countDescriptor)
+        // count.update(count.value() + 1)
 
+
+        val isWatermarkEmmited = triggerContext.getPartitionedState(isWatermarkEmmitedDescriptor)
+        if(!isWatermarkEmmited.value() && w.maxTimestamp() <= triggerContext.getCurrentWatermark) {
+          isWatermarkEmmited.update(true)
+          triggerContext.registerEventTimeTimer(1000)
+        }
+        TriggerResult.CONTINUE
+
+        /*
         if(count.value() == 1000000) {
           println("### Firing!!!")
           TriggerResult.FIRE_AND_PURGE
         } else {
           TriggerResult.CONTINUE
         }
+        */
       }
 
       override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = ???
 
       override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        TriggerResult.CONTINUE
+        println("onEventTime called")
+        // on second call purge also
+        TriggerResult.FIRE
       }
     }
 
