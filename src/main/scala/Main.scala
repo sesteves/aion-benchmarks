@@ -132,6 +132,9 @@ object Main {
         // on second call purge also
         TriggerResult.FIRE
       }
+
+      override def clear(w: TimeWindow, triggerContext: Trigger.TriggerContext) = {
+      }
     }
 
     val numRecords = new IntCounter()
