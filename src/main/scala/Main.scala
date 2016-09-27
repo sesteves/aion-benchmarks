@@ -25,10 +25,10 @@ object Main {
   def main(args: Array[String]): Unit = {
 
     if (args.length != 2) {
-      System.err.println("Usage: Main <maxTuplesInMemory> <complexity>")
+      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, complexity) = (args(0).toInt, args(1).toInt)
+    val (maxTuplesInMemory, tuplesWkThreshold, complexity) = (args(0).toInt, args(1).toLong, args(1).toInt)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
@@ -53,10 +53,10 @@ object Main {
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = timestamp
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
-        if(!watermarkEmitted && lastElement._3 > 900000) {
+        if(!watermarkEmitted && lastElement._3 > tuplesWkThreshold) {
           watermarkEmitted = true
           val ts = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
-          println(s"### emitting watermark at ts: $ts")
+          // println(s"### emitting watermark at ts: $ts")
           new watermark.Watermark(ts)
         } else null
       }
@@ -97,17 +97,11 @@ object Main {
 
 
     val trigger3 = new Trigger[Any, TimeWindow] {
-      //val countDescriptor = new ValueStateDescriptor[java.lang.Long]("COUNTER", classof[java.lang.long], 0l)
-      val timerRegisteredDescriptor =
-        new ValueStateDescriptor[java.lang.Boolean]("TIMER_REGISTERED", classOf[java.lang.Boolean], false)
+      val firedOnWatermarkDescriptor =
+        new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-
-        val timerRegistered = triggerContext.getPartitionedState(timerRegisteredDescriptor)
-        if(!timerRegistered.value()) {
-          timerRegistered.update(true)
-          triggerContext.registerEventTimeTimer(w.maxTimestamp())
-        }
+        triggerContext.registerEventTimeTimer(w.maxTimestamp())
         TriggerResult.CONTINUE
       }
 
@@ -115,20 +109,23 @@ object Main {
         = ???
 
       override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        println(s"### onEventTime called (time: $time, window: $timeWindow)")
+        // println(s"### onEventTime called (time: $time, window: $timeWindow)")
 
         if (time == timeWindow.maxTimestamp) {
-          triggerContext.deleteEventTimeTimer(timeWindow.maxTimestamp())
-          println("FIRE!")
-          TriggerResult.FIRE
+          val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
+          if(firedOnWatermark.value()) {
+            TriggerResult.CONTINUE
+          } else {
+            firedOnWatermark.update(true)
+            TriggerResult.FIRE
+          }
         } else {
-          println("FIRE AND PURGE!")
+          // println("FIRE AND PURGE!")
           TriggerResult.FIRE_AND_PURGE
         }
       }
 
-      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = {
-      }
+      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = ???
     }
 
     val numRecords = new IntCounter()
@@ -169,7 +166,7 @@ object Main {
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) => {
-      println("### Iterator size: " + iterator.size)
+      // println("### Iterator size: " + iterator.size)
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
