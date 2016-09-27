@@ -98,9 +98,16 @@ object Main {
 
     val trigger3 = new Trigger[Any, TimeWindow] {
       //val countDescriptor = new ValueStateDescriptor[java.lang.Long]("COUNTER", classof[java.lang.long], 0l)
+      val timerRegisteredDescriptor =
+        new ValueStateDescriptor[java.lang.Boolean]("TIMER_REGISTERED", classOf[java.lang.Boolean], false)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        triggerContext.registerEventTimeTimer(w.maxTimestamp())
+
+        val timerRegistered = triggerContext.getPartitionedState(timerRegisteredDescriptor)
+        if(!timerRegistered.value()) {
+          timerRegistered.update(true)
+          triggerContext.registerEventTimeTimer(w.maxTimestamp())
+        }
         TriggerResult.CONTINUE
       }
 
