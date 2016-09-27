@@ -55,8 +55,9 @@ object Main {
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         if(!watermarkEmitted && lastElement._3 > 900000) {
           watermarkEmitted = true
-          val timestamp = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
-          new watermark.Watermark(timestamp)
+          val ts = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
+          println(s"### emitting watermark at ts: $ts")
+          new watermark.Watermark(ts)
         } else null
       }
     }
@@ -107,11 +108,14 @@ object Main {
         = ???
 
       override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        println("onEventTime called")
+        println(s"### onEventTime called (time: $time, window: $timeWindow)")
+
         if (time == timeWindow.maxTimestamp) {
           triggerContext.deleteEventTimeTimer(timeWindow.maxTimestamp())
+          println("FIRE!")
           TriggerResult.FIRE
         } else {
+          println("FIRE AND PURGE!")
           TriggerResult.FIRE_AND_PURGE
         }
       }
