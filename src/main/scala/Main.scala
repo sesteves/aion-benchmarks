@@ -125,7 +125,7 @@ object Main {
         }
       }
 
-      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = ???
+      // override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = ???
     }
 
     val numRecords = new IntCounter()
