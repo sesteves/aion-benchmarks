@@ -24,7 +24,7 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length != 2) {
+    if (args.length != 3) {
       System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity>")
       System.exit(1)
     }
