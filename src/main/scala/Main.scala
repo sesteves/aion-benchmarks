@@ -28,7 +28,7 @@ object Main {
       System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesWkThreshold, complexity) = (args(0).toInt, args(1).toLong, args(1).toInt)
+    val (maxTuplesInMemory, tuplesWkThreshold, complexity) = (args(0).toInt, args(1).toLong, args(2).toInt)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
