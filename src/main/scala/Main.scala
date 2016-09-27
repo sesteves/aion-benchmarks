@@ -55,7 +55,7 @@ object Main {
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         if(!watermarkEmitted && lastElement._3 > 900000) {
           watermarkEmitted = true
-          val timestamp = extractedTimestamp + TimeUnit.MINUTES.toMillis(5)
+          val timestamp = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
           new watermark.Watermark(timestamp)
         } else null
       }
@@ -96,44 +96,27 @@ object Main {
 
 
     val trigger3 = new Trigger[Any, TimeWindow] {
-      //val countDescriptor = new ValueStateDescriptor[Long]("COUNTER", Long.getClass, 0l)
-
-      val isWatermarkEmmitedDescriptor =
-        new ValueStateDescriptor[java.lang.Boolean]("WATERMARK_EMMITED", classOf[java.lang.Boolean], false)
+      //val countDescriptor = new ValueStateDescriptor[java.lang.Long]("COUNTER", classof[java.lang.long], 0l)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        // compute the cleanup time and store it in a ValueState (so you have to pass the allowedLateness somehow)
-
-        // val count = triggerContext.getPartitionedState(countDescriptor)
-        // count.update(count.value() + 1)
-
-
-        val isWatermarkEmmited = triggerContext.getPartitionedState(isWatermarkEmmitedDescriptor)
-        if(!isWatermarkEmmited.value() && w.maxTimestamp() <= triggerContext.getCurrentWatermark) {
-          isWatermarkEmmited.update(true)
-          triggerContext.registerEventTimeTimer(1000)
-        }
+        triggerContext.registerEventTimeTimer(w.maxTimestamp())
         TriggerResult.CONTINUE
-
-        /*
-        if(count.value() == 1000000) {
-          println("### Firing!!!")
-          TriggerResult.FIRE_AND_PURGE
-        } else {
-          TriggerResult.CONTINUE
-        }
-        */
       }
 
-      override def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = ???
+      override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
+        = ???
 
-      override def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+      override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         println("onEventTime called")
-        // on second call purge also
-        TriggerResult.FIRE
+        if (time == timeWindow.maxTimestamp) {
+          triggerContext.deleteEventTimeTimer(timeWindow.maxTimestamp())
+          TriggerResult.FIRE
+        } else {
+          TriggerResult.FIRE_AND_PURGE
+        }
       }
 
-      override def clear(w: TimeWindow, triggerContext: Trigger.TriggerContext) = {
+      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = {
       }
     }
 
@@ -191,7 +174,7 @@ object Main {
 
     stream.keyBy(1)
       .timeWindow(Time.of(5, TimeUnit.MINUTES))
-      .allowedLateness(Time.of(1, TimeUnit.MINUTES))
+      .allowedLateness(Time.of(1, TimeUnit.HOURS))
       .trigger(trigger3)
 //      .trigger(trigger2)
         // .apply(myFunction)
