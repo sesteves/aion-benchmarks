@@ -35,7 +35,7 @@ object CollectMemoryStats {
       val pw = new PrintWriter(new File(fname))
 
       try {
-        pw.println("timestamp, used, commited, max, swap")
+        pw.println("timestamp, used, committed, max, swap")
 
         val vm = VirtualMachine.attach(vmDesc.get.id)
 
