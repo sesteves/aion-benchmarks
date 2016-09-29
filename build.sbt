@@ -14,7 +14,9 @@ libraryDependencies ++= Seq(
 
 fork in run := true
 
-javaOptions in run ++= Seq("-Xms8G", "-Xmx8G", "-XX:MaxPermSize=8G")
+val heapSize = Option(System.getProperty("heapsize")).getOrElse("8G")
+
+javaOptions in run ++= Seq(s"-Xms$heapSize", s"-Xmx$heapSize")
 
 // javaOptions in run += "-Djava.library.path=\"./native/\""
 
