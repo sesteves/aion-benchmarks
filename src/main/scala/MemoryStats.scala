@@ -15,9 +15,6 @@ object MemoryStats {
 
   def main(args: Array[String]): Unit = {
 
-    val processName = "run-main Main"
-    // val processName = "DataGenerator"
-
     while (true) {
       val vmsDesc = VirtualMachine.list()
 

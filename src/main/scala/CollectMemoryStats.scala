@@ -17,7 +17,7 @@ object CollectMemoryStats {
 
   def main(args: Array[String]): Unit = {
 
-    val processName = "run-main Main"
+    val processName = "Main"
     // val processName = "DataGenerator"
 
     while (true) {
@@ -26,7 +26,7 @@ object CollectMemoryStats {
         val vmsDesc = VirtualMachine.list()
         vmDesc = vmsDesc.find(desc => {
           println(s"name: ${desc.displayName()}, id: ${desc.id()}")
-          desc.displayName().contains(processName)
+          desc.displayName().startsWith(processName)
         })
         Thread.sleep(1000)
       }
