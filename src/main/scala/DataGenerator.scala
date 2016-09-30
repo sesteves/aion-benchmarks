@@ -21,18 +21,18 @@ object DataGenerator {
     println("Listening on port " + port)
 
     // val nrecords = Seq(100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000)
+    // val nrecords = Seq(1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000)
+    val nrecords = Seq(1200000, 1400000, 1600000, 1800000)
 
-    val nrecords = Seq(1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000)
-
-    // for(i <- 0 to nrecords.size - 1) {
     while(true) {
-      val socket = serverSocket.accept()
-      println("Got a new connection")
+      for(i <- 0 to nrecords.size - 1) {
+        val socket = serverSocket.accept()
+        println("Got a new connection")
 
-      val out = new PrintWriter(socket.getOutputStream)
-      try {
+        val out = new PrintWriter(socket.getOutputStream)
+        try {
 
-          (1 to nrecords(0)).foreach(j => out.println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
+          (1 to nrecords(i)).foreach(j => out.println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
@@ -57,12 +57,13 @@ object DataGenerator {
             " 1 " + j.toString))
           out.flush
 
-        println("Done")
-      } catch {
-        case ex: IOException => ex.printStackTrace()
-      } finally {
-        out.close()
-        socket.close()
+          println(s"${nrecords(i)} lines sent")
+        } catch {
+          case ex: IOException => ex.printStackTrace()
+        } finally {
+          out.close()
+          socket.close()
+        }
       }
     }
 
