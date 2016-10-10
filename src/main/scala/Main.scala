@@ -1,6 +1,7 @@
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
+import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.common.state.ValueStateDescriptor
@@ -46,11 +47,22 @@ object Main {
     rawStream.map(line => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
       .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
 
+
+
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
       val timestamp = System.currentTimeMillis()
       var watermarkEmitted = false
 
-      override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = timestamp
+      // scale and shape (or mean and stddev) are 0 and 1 respectively
+      val logNormalDist = new LogNormalDistribution()
+
+      override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
+
+
+
+        timestamp
+
+      }
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
         if(!watermarkEmitted && lastElement._3 > tuplesWkThreshold) {
