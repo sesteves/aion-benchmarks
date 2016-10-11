@@ -21,7 +21,13 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.api.{TimeCharacteristic, watermark}
 import org.apache.flink.util.Collector
 
+import scala.util.Random
+
 object Main {
+
+  val WindowDurationSec = 30
+  val WindowDurationMillis = TimeUnit.SECONDS.toMillis(WindowDurationSec)
+  val NumberOfPastWindows = 2
 
   def main(args: Array[String]): Unit = {
 
@@ -50,27 +56,41 @@ object Main {
 
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
-      val timestamp = System.currentTimeMillis()
-      var watermarkEmitted = false
-
+      // var watermarkEmitted = false
       // scale and shape (or mean and stddev) are 0 and 1 respectively
-      val logNormalDist = new LogNormalDistribution()
+      // val logNormalDist = new LogNormalDistribution()
+
+      var windowMaxTS = -1l
+
+      val r = Random
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
+        val i = r.nextInt(100)
 
+        // TODO generalize the following
+        val windowIndex = if(i < 70) 0 else if(i < 90) 1 else 2
 
-
-        timestamp
-
+        val ts = System.currentTimeMillis()
+        if(windowMaxTS < 0) {
+          windowMaxTS = ts - (ts % WindowDurationMillis) + WindowDurationMillis
+        }
+        ts - windowIndex * WindowDurationMillis
       }
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
-        if(!watermarkEmitted && lastElement._3 > tuplesWkThreshold) {
-          watermarkEmitted = true
-          val ts = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
-          // println(s"### emitting watermark at ts: $ts")
-          new watermark.Watermark(ts)
-        } else null
+
+        if(extractedTimestamp > windowMaxTS) {
+          val windowMaxTS = extractedTimestamp - (extractedTimestamp % WindowDurationMillis) + WindowDurationMillis
+          new Watermark(extractedTimestamp)
+        } else
+          null
+
+//        if(!watermarkEmitted && lastElement._3 > tuplesWkThreshold) {
+//          watermarkEmitted = true
+//          val ts = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
+//          // println(s"### emitting watermark at ts: $ts")
+//          new watermark.Watermark(ts)
+//        } else null
       }
     }
 
@@ -193,8 +213,8 @@ object Main {
     }
 
     stream.keyBy(1)
-      .timeWindow(Time.of(5, TimeUnit.MINUTES))
-      .allowedLateness(Time.of(1, TimeUnit.HOURS))
+      .timeWindow(Time.of(WindowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(WindowDurationSec * NumberOfPastWindows, TimeUnit.SECONDS))
       .trigger(trigger3)
 //      .trigger(trigger2)
         // .apply(myFunction)
