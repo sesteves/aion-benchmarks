@@ -5,7 +5,6 @@ import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
 import org.apache.flink.api.common.state.ValueStateDescriptor
-import org.apache.flink.api.common.typeutils.base.BooleanSerializer
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
@@ -25,7 +24,7 @@ import scala.util.Random
 
 object Main {
 
-  val WindowDurationSec = 30
+  val WindowDurationSec = 5
   val WindowDurationMillis = TimeUnit.SECONDS.toMillis(WindowDurationSec)
   val NumberOfPastWindows = 2
 
@@ -43,7 +42,7 @@ object Main {
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
-//    def makeTuples(n: Int) = (1 to n).map((_, 1))
+//    def makeTuples(n: Int) = (1 to nransient).map((_, 1))
 //    val stream = env.fromElements(makeTuples(1000000): _*)
 //      .assignAscendingTimestamps(p => System.currentTimeMillis())
 
@@ -62,9 +61,11 @@ object Main {
 
       var windowMaxTS = -1l
 
-      val r = Random
+      @transient
+      var r: Random = null
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
+        if(r == null) r = Random
         val i = r.nextInt(100)
 
         // TODO generalize the following
@@ -73,6 +74,7 @@ object Main {
         val ts = System.currentTimeMillis()
         if(windowMaxTS < 0) {
           windowMaxTS = ts - (ts % WindowDurationMillis) + WindowDurationMillis
+          println(s"### setting window maxTS to: $windowMaxTS, ts: $ts")
         }
         ts - windowIndex * WindowDurationMillis
       }
@@ -80,7 +82,8 @@ object Main {
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
 
         if(extractedTimestamp > windowMaxTS) {
-          val windowMaxTS = extractedTimestamp - (extractedTimestamp % WindowDurationMillis) + WindowDurationMillis
+          windowMaxTS = extractedTimestamp - (extractedTimestamp % WindowDurationMillis) + WindowDurationMillis
+          println(s"### Emitting watermark at ts: $extractedTimestamp, windowsMaxTS: $windowMaxTS")
           new Watermark(extractedTimestamp)
         } else
           null
@@ -198,7 +201,7 @@ object Main {
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) => {
-      // println("### Iterator size: " + iterator.size)
+      println("### Iterator size: " + iterator.size)
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],

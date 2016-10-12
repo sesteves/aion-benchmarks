@@ -1,5 +1,5 @@
-import java.io.{IOException, PrintWriter}
-import java.net.ServerSocket
+import java.io.{BufferedWriter, IOException, OutputStreamWriter, PrintWriter}
+import java.net.{ServerSocket, SocketException}
 
 /**
   * Created by sesteves on 19-05-2016.
@@ -29,11 +29,12 @@ object DataGenerator {
       val socket = serverSocket.accept()
       println("Got a new connection")
 
-      val out = new PrintWriter(socket.getOutputStream)
+      // val out = new PrintWriter(socket.getOutputStream)
+      val out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream))
       try {
         var i = 0
         while (true) {
-          out.println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
+          out.write("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
@@ -55,17 +56,17 @@ object DataGenerator {
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
-            " 1 " + i.toString)
+            " 1 " + i.toString + "\n")
           i += 1
           if(i == 1000000) i = 0
-          if(i % 100000 == 0) out.flush
+          if(i % 10000 == 0) out.flush
         }
 
         // println(s"${nrecords(i)} lines sent")
       } catch {
-        case ex: IOException => ex.printStackTrace()
+        case ex: SocketException => println("connection closed")
       } finally {
-        out.close()
+        // out.close()
         socket.close()
       }
       // }
