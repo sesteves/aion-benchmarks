@@ -17,24 +17,26 @@ import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
-import org.apache.flink.streaming.api.{TimeCharacteristic, watermark}
+import org.apache.flink.streaming.api.{TimeCharacteristic}
 import org.apache.flink.util.Collector
-
-import scala.util.Random
 
 object Main {
 
-  val WindowDurationSec = 5
-  val WindowDurationMillis = TimeUnit.SECONDS.toMillis(WindowDurationSec)
-  val NumberOfPastWindows = 2
+//  val WindowDurationSec = 5
+//  val WindowDurationMillis = TimeUnit.SECONDS.toMillis(WindowDurationSec)
+//  val NumberOfPastWindows = 2
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length != 3) {
-      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity>")
+    if (args.length != 6) {
+      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity> " +
+        "<windowDurationSec> <numberOfPastWindows> <maximumWindows>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesWkThreshold, complexity) = (args(0).toInt, args(1).toLong, args(2).toInt)
+    val (maxTuplesInMemory, tuplesWkThreshold, complexity, windowDurationSec, numberOfPastWindows, maximumWindows) =
+      (args(0).toInt, args(1).toLong, args(2).toInt, args(3).toInt, args(4).toInt, args(5).toInt)
+
+    val windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
@@ -56,33 +58,29 @@ object Main {
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
       // var watermarkEmitted = false
+
       // scale and shape (or mean and stddev) are 0 and 1 respectively
-      // val logNormalDist = new LogNormalDistribution()
+      val logNormalDist = new LogNormalDistribution()
 
       var windowMaxTS = -1l
 
-      @transient
-      var r: Random = null
-
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
-        if(r == null) r = Random
-        val i = r.nextInt(100)
 
-        // TODO generalize the following
-        val windowIndex = if(i < 70) 0 else if(i < 90) 1 else 2
+        val sample = math.round(logNormalDist.sample())
+        val windowIndex = if(sample == 1) 0 else sample
 
         val ts = System.currentTimeMillis()
         if(windowMaxTS < 0) {
-          windowMaxTS = ts - (ts % WindowDurationMillis) + WindowDurationMillis
+          windowMaxTS = ts - (ts % windowDurationMillis) + windowDurationMillis
           println(s"### setting window maxTS to: $windowMaxTS, ts: $ts")
         }
-        ts - windowIndex * WindowDurationMillis
+        ts - windowIndex * windowDurationMillis
       }
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
 
         if(extractedTimestamp > windowMaxTS) {
-          windowMaxTS = extractedTimestamp - (extractedTimestamp % WindowDurationMillis) + WindowDurationMillis
+          windowMaxTS = extractedTimestamp - (extractedTimestamp % windowDurationMillis) + windowDurationMillis
           println(s"### Emitting watermark at ts: $extractedTimestamp, windowsMaxTS: $windowMaxTS")
           new Watermark(extractedTimestamp)
         } else
@@ -135,6 +133,9 @@ object Main {
       val firedOnWatermarkDescriptor =
         new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
 
+      val windowCountDescriptor =
+        new ValueStateDescriptor[java.lang.Integer]("WINDOW_COUNT", classOf[java.lang.Integer], 0)
+
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         triggerContext.registerEventTimeTimer(w.maxTimestamp())
         TriggerResult.CONTINUE
@@ -160,7 +161,11 @@ object Main {
         }
       }
 
-      // override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = ???
+      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = {
+        val windowCount = triggerContext.getPartitionedState(windowCountDescriptor)
+        windowCount.update(windowCount.value() + 1)
+        if(windowCount.value() > maximumWindows) System.exit(0)
+      }
     }
 
     val numRecords = new IntCounter()
@@ -216,13 +221,14 @@ object Main {
     }
 
     stream.keyBy(1)
-      .timeWindow(Time.of(WindowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(WindowDurationSec * NumberOfPastWindows, TimeUnit.SECONDS))
+      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(windowDurationSec * numberOfPastWindows, TimeUnit.SECONDS))
       .trigger(trigger3)
 //      .trigger(trigger2)
         // .apply(myFunction)
         .apply(function)
-//      .sum(1)
+//      .sum(1)[INFO] flink-cep ......................................... SUCCESS [2.819s]
+
 //        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
 //        .max(0)
       //.print()
