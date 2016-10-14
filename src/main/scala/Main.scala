@@ -30,10 +30,10 @@ object Main {
 
     if (args.length != 6) {
       System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity> " +
-        "<windowDurationSec> <numberOfPastWindows> <maximumWindows>")
+        "<windowDurationSec> <numberOfPastWindows> <maximumWatermarks>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesWkThreshold, complexity, windowDurationSec, numberOfPastWindows, maximumWindows) =
+    val (maxTuplesInMemory, tuplesWkThreshold, complexity, windowDurationSec, numberOfPastWindows, maximumWatermarks) =
       (args(0).toInt, args(1).toLong, args(2).toInt, args(3).toInt, args(4).toInt, args(5).toInt)
 
     val windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
@@ -59,6 +59,8 @@ object Main {
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
       // var watermarkEmitted = false
 
+      var watermarkCount = 0
+
       // scale and shape (or mean and stddev) are 0 and 1 respectively
       val logNormalDist = new LogNormalDistribution()
 
@@ -80,6 +82,9 @@ object Main {
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
 
         if(extractedTimestamp > windowMaxTS) {
+          watermarkCount += 1
+          if(watermarkCount == maximumWatermarks) System.exit(0)
+
           windowMaxTS = extractedTimestamp - (extractedTimestamp % windowDurationMillis) + windowDurationMillis
           println(s"### Emitting watermark at ts: $extractedTimestamp, windowsMaxTS: $windowMaxTS")
           new Watermark(extractedTimestamp)
@@ -133,8 +138,8 @@ object Main {
       val firedOnWatermarkDescriptor =
         new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
 
-      val windowCountDescriptor =
-        new ValueStateDescriptor[java.lang.Integer]("WINDOW_COUNT", classOf[java.lang.Integer], 0)
+//      val windowCountDescriptor =
+//        new ValueStateDescriptor[java.lang.Integer]("WINDOW_COUNT", classOf[java.lang.Integer], 0)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         triggerContext.registerEventTimeTimer(w.maxTimestamp())
@@ -161,11 +166,11 @@ object Main {
         }
       }
 
-      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = {
-        val windowCount = triggerContext.getPartitionedState(windowCountDescriptor)
-        windowCount.update(windowCount.value() + 1)
-        if(windowCount.value() > maximumWindows) System.exit(0)
-      }
+//      override def clear(timeWindow: TimeWindow, triggerContext: Trigger.TriggerContext) = {
+//        val windowCount = triggerContext.getPartitionedState(windowCountDescriptor)
+//        windowCount.update(windowCount.value() + 1)
+//        if(windowCount.value() > maximumWindows) System.exit(0)
+//      }
     }
 
     val numRecords = new IntCounter()
