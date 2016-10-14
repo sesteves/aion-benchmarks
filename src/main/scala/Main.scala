@@ -17,8 +17,10 @@ import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
-import org.apache.flink.streaming.api.{TimeCharacteristic}
+import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.util.Collector
+
+import scala.util.Random
 
 object Main {
 
@@ -55,7 +57,7 @@ object Main {
 
     val throughputFName = s"throughput-${System.currentTimeMillis()}.txt"
     rawStream.map(_ => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
-      .map(new PrintWriter(new FileOutputStream(new File(throughputFName), true), true).println(_))
+      .map(tuple => new PrintWriter(new FileOutputStream(new File(throughputFName), true), true).println(tuple._1))
      // .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv", )
 
 
@@ -67,12 +69,20 @@ object Main {
       // scale and shape (or mean and stddev) are 0 and 1 respectively
       val logNormalDist = new LogNormalDistribution()
 
+      @transient
+      var random: Random = null
+
       var windowMaxTS = -1l
 
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
 
-        val sample = math.round(logNormalDist.sample())
-        val windowIndex = if(sample == 1) 0 else sample
+        if(random == null) random = Random
+
+        // val sample = math.round(logNormalDist.sample())
+        // val windowIndex = if(sample == 1) 0 else sample
+
+        val sample = random.nextInt(100)
+        val windowIndex = if(sample < 70) 0 else if(sample < 90) 1 else 2
 
         val ts = System.currentTimeMillis()
         if(windowMaxTS < 0) {
