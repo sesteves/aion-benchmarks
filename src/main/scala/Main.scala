@@ -51,9 +51,12 @@ object Main {
 
     val rawStream = env.socketTextStream("localhost", 9990)
 
-    rawStream.map(line => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
-      .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv")
+    env.setBufferTimeout(0)
 
+    val throughputFName = s"throughput-${System.currentTimeMillis()}.txt"
+    rawStream.map(_ => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
+      .map(new PrintWriter(new FileOutputStream(new File(throughputFName), true), true).println(_))
+     // .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv", )
 
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
@@ -241,8 +244,8 @@ object Main {
 
     val result = env.execute()
 
-    val pw = new PrintWriter(new FileOutputStream(new File("runtime.txt"), true))
-    pw.println(result.getNetRuntime(TimeUnit.SECONDS))
-    pw.close()
+//    val pw = new PrintWriter(new FileOutputStream(new File("runtime.txt"), true))
+//    pw.println(result.getNetRuntime(TimeUnit.SECONDS))
+//    pw.close()
   }
 }
