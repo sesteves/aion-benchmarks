@@ -57,7 +57,10 @@ object Main {
 
     val throughputFName = s"throughput-${System.currentTimeMillis()}.txt"
     rawStream.map(_ => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
-      .map(tuple => new PrintWriter(new FileOutputStream(new File(throughputFName), true), true).println(tuple._1))
+      .map(tuple => {
+        val pw = new PrintWriter(new FileOutputStream(new File(throughputFName), true), true)
+        pw.println(s"${System.currentTimeMillis()},${tuple._1}")
+      })
      // .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv", )
 
 
@@ -146,13 +149,11 @@ object Main {
 //        TriggerResult.FIRE
 //    }
 
+    val fireFName = s"fire-${System.currentTimeMillis()}.txt"
 
     val trigger3 = new Trigger[Any, TimeWindow] {
       val firedOnWatermarkDescriptor =
         new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
-
-//      val windowCountDescriptor =
-//        new ValueStateDescriptor[java.lang.Integer]("WINDOW_COUNT", classOf[java.lang.Integer], 0)
 
       override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
         triggerContext.registerEventTimeTimer(w.maxTimestamp())
@@ -170,7 +171,9 @@ object Main {
           if(firedOnWatermark.value()) {
             TriggerResult.CONTINUE
           } else {
+            val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
             firedOnWatermark.update(true)
+            pw.println(System.currentTimeMillis())
             TriggerResult.FIRE
           }
         } else {
@@ -224,7 +227,7 @@ object Main {
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) => {
-      println("### Iterator size: " + iterator.size)
+      println("### Iterator size: " + iterator.size + ", window: " + timeWindow)
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
