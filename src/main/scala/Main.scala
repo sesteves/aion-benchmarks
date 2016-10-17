@@ -222,13 +222,21 @@ object Main {
       }
     }
 
+    val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
+
     def simpleFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) =>
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) => {
-      println("### Iterator size: " + iterator.size + ", window: " + timeWindow)
+
+      val startTick = System.currentTimeMillis()
       collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+      val endTick = System.currentTimeMillis()
+      println("### Iterator size: " + iterator.size + ", window: " + timeWindow)
+
+      val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${iterator.size}")
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) =>
