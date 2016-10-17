@@ -53,8 +53,6 @@ object Main {
 
     val rawStream = env.socketTextStream("localhost", 9990)
 
-    env.setBufferTimeout(0)
-
     val throughputFName = s"throughput-${System.currentTimeMillis()}.txt"
     rawStream.map(_ => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
       .map(tuple => {
@@ -150,6 +148,7 @@ object Main {
 //    }
 
     val fireFName = s"fire-${System.currentTimeMillis()}.txt"
+    val fireAndPurgeFName = s"fire-and-purge-${System.currentTimeMillis()}.txt"
 
     val trigger3 = new Trigger[Any, TimeWindow] {
       val firedOnWatermarkDescriptor =
@@ -171,12 +170,14 @@ object Main {
           if(firedOnWatermark.value()) {
             TriggerResult.CONTINUE
           } else {
-            val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
             firedOnWatermark.update(true)
+            val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
             pw.println(System.currentTimeMillis())
             TriggerResult.FIRE
           }
         } else {
+          val pw = new PrintWriter(new FileOutputStream(new File(fireAndPurgeFName), true), true)
+          pw.println(System.currentTimeMillis())
           // println("FIRE AND PURGE!")
           TriggerResult.FIRE_AND_PURGE
         }
