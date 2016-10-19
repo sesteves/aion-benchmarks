@@ -20,6 +20,8 @@ object CollectMemoryStats {
     val processName = "Main"
     // val processName = "DataGenerator"
 
+    val sigar = new Sigar
+
     while (true) {
       var vmDesc: Option[VirtualMachineDescriptor] = None
       while (vmDesc.isEmpty) {
@@ -54,18 +56,37 @@ object CollectMemoryStats {
         val url = new JMXServiceURL(connectorAddress)
         val connector = JMXConnectorFactory.connect(url)
 
+        var previousTime = -1l
+        var previousReadBytes = -1l
+        var previousWriteBytes = -1l
+
         val mbeanConn = connector.getMBeanServerConnection
         while (true) {
           val bean = mbeanConn.getAttribute(new ObjectName("java.lang:type=Memory"), "HeapMemoryUsage")
             .asInstanceOf[CompositeData]
           val values = bean.getAll(Array("used", "committed", "max"))
 
-          val sigar = new Sigar
+          val usage = sigar.getDiskUsage("/")
+          val now = System.currentTimeMillis()
+          val readBytes = usage.getReadBytes
+          val writeBytes = usage.getWriteBytes
+          if(previousTime < 0) {
+            previousReadBytes = readBytes
+            previousWriteBytes = writeBytes
+          }
+          val interval = (now - previousTime) / 1000
+          val readRate = (readBytes - previousReadBytes) / interval
+          val writeRate = (writeBytes - previousWriteBytes) / interval
+          previousTime = now
+          previousReadBytes = readBytes
+          previousWriteBytes = writeBytes
+
           // val pids = ProcessFinder.find(sigar, s"CredName.User.eq=sesteves")
           // pids.foreach(println)
           val swap = sigar.getSwap
 
-          val stat = "%d,%d,%d,%d,%d".format(System.currentTimeMillis(), values(0), values(1), values(2), swap.getUsed)
+          val stat = "%d,%d,%d,%d,%d,%d,%d".format(System.currentTimeMillis(), values(0), values(1), values(2),
+            readRate, writeRate, swap.getUsed)
           pw.println(stat)
 
           Thread.sleep(1000)
