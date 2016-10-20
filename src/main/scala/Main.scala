@@ -70,20 +70,23 @@ object Main {
       // scale and shape (or mean and stddev) are 0 and 1 respectively
       val logNormalDist = new LogNormalDistribution()
 
-      @transient
-      var random: Random = null
+//      @transient
+//      var random: Random = null
 
       var windowMaxTS = -1l
 
+      def sample(): Int = {
+        val i = math.round(logNormalDist.sample()).toInt - 1
+        if(i <= numberOfPastWindows) { if(i < 0) 0 else i } else sample()
+      }
+
       override def extractTimestamp(element: (String, Int, Long), previousElementTimestamp: Long): Long = {
+        // if(random == null) random = Random
 
-        if(random == null) random = Random
+        val windowIndex = sample()
 
-        // val sample = math.round(logNormalDist.sample())
-        // val windowIndex = if(sample == 1) 0 else sample
-
-        val sample = random.nextInt(100)
-        val windowIndex = if(sample < 70) 0 else if(sample < 90) 1 else 2
+        // val sample = random.nextInt(100)
+        // val windowIndex = if(sample < 70) 0 else if(sample < 90) 1 else 2
 
         val ts = System.currentTimeMillis()
         if(windowMaxTS < 0) {
