@@ -239,11 +239,10 @@ object Main {
       collector.collect(result)
       val endTick = System.currentTimeMillis()
 
-      val str = s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}"
-      println("### " + str)
+      println("### Iterator: " + result._2 + ", time: " + (endTick - startTick))
 
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(str)
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) =>
