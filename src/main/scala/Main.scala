@@ -238,10 +238,12 @@ object Main {
       val result = iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2))
       collector.collect(result)
       val endTick = System.currentTimeMillis()
-      println("### Iterator size: " + result._2 + ", window: " + timeWindow)
+
+      val str = s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}"
+      println("### " + str)
 
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
+      pw.println(str)
     }
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) =>
