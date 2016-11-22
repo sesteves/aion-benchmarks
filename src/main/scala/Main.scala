@@ -257,7 +257,7 @@ object Main {
 
     stream.keyBy(1)
       .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(windowDurationSec * numberOfPastWindows, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * 2 - 1, TimeUnit.NANOSECONDS))
       .trigger(trigger3)
 //      .trigger(trigger2)
         // .apply(myFunction)
