@@ -20,7 +20,6 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.util.Collector
 
-import scala.util.Random
 
 object Main {
 
@@ -42,7 +41,8 @@ object Main {
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory))
+    val tuplesAfterSpillFactor = 0.1;
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
