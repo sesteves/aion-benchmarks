@@ -63,14 +63,14 @@ object CollectMemoryStats {
         val mbeanConn = connector.getMBeanServerConnection
         while (true) {
 
-          val mbeans = mbeanConn.queryNames(null, null)
-          mbeans.filter(_.toString.contains("GarbageCollector")) foreach(mbean => {
-            System.out.println("bean: " + mbean + " canonicalname: " + mbean.getCanonicalName)
-            val info = mbeanConn.getMBeanInfo(mbean)
-            info.getAttributes.foreach(attr => {
-              System.out.println(attr.getName)
-            })
-          })
+//          val mbeans = mbeanConn.queryNames(null, null)
+//          mbeans.filter(_.toString.contains("GarbageCollector")) foreach(mbean => {
+//            System.out.println("bean: " + mbean + " canonicalname: " + mbean.getCanonicalName)
+//            val info = mbeanConn.getMBeanInfo(mbean)
+//            info.getAttributes.foreach(attr => {
+//              System.out.println(attr.getName)
+//            })
+//          })
 
           val bean = mbeanConn.getAttribute(new ObjectName("java.lang:type=Memory"), "HeapMemoryUsage")
             .asInstanceOf[CompositeData]
