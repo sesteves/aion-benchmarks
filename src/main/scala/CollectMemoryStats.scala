@@ -111,7 +111,7 @@ object CollectMemoryStats {
           val swap = sigar.getSwap
 
           val stat = "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d".format(System.currentTimeMillis(), values(0), values(1), values(2),
-            readRate, writeRate, swap.getUsed, gcScavengeCollectionTime, gcScavengeCollectionTime,
+            readRate, writeRate, swap.getUsed, gcScavengeCollectionTime, gcScavengeCollectionCount,
             gcMarkSweepCollectionTime,gcMarkSweepCollectionCount, uptime)
           pw.println(stat)
 
