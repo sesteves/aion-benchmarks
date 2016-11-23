@@ -1,5 +1,5 @@
 import java.io.{File, PrintWriter}
-import javax.management.ObjectName
+import javax.management.{Attribute, ObjectName}
 import javax.management.openmbean.CompositeData
 import javax.management.remote.{JMXConnectorFactory, JMXServiceURL}
 
@@ -62,10 +62,35 @@ object CollectMemoryStats {
 
         val mbeanConn = connector.getMBeanServerConnection
         while (true) {
+
+          val mbeans = mbeanConn.queryNames(null, null)
+          mbeans.filter(_.toString.contains("GarbageCollector")) foreach(mbean => {
+            System.out.println("bean: " + mbean + " canonicalname: " + mbean.getCanonicalName)
+            val info = mbeanConn.getMBeanInfo(mbean)
+            info.getAttributes.foreach(attr => {
+              System.out.println(attr.getName)
+            })
+          })
+
           val bean = mbeanConn.getAttribute(new ObjectName("java.lang:type=Memory"), "HeapMemoryUsage")
             .asInstanceOf[CompositeData]
           val values = bean.getAll(Array("used", "committed", "max"))
 
+          // get scavenge collector bean
+          val gcScavenge = mbeanConn.getAttributes(new ObjectName("java.lang:type=GarbageCollector,name=PS Scavenge"),
+            Array("CollectionTime", "CollectionCount"))
+          val gcScavengeCollectionTime = gcScavenge.get(0).asInstanceOf[Attribute].getValue.asInstanceOf[Long]
+          val gcScavengeCollectionCount = gcScavenge.get(1).asInstanceOf[Attribute].getValue.asInstanceOf[Long]
+
+          // get marksweep collector bean
+          val gcMarkSweep = mbeanConn.getAttributes(new ObjectName("java.lang:type=GarbageCollector,name=PS MarkSweep"),
+            Array("CollectionTime", "CollectionCount"))
+          val gcMarkSweepCollectionTime = gcMarkSweep.get(0).asInstanceOf[Attribute].getValue.asInstanceOf[Long]
+          val gcMarkSweepCollectionCount = gcMarkSweep.get(1).asInstanceOf[Attribute].getValue.asInstanceOf[Long]
+
+          val uptime = mbeanConn.getAttribute(new ObjectName("java.lang:type=Runtime"), "Uptime").asInstanceOf[Long]
+
+          // disk usage
           val usage = sigar.getDiskUsage("/")
           val now = System.currentTimeMillis()
           val readBytes = usage.getReadBytes
@@ -85,8 +110,9 @@ object CollectMemoryStats {
           // pids.foreach(println)
           val swap = sigar.getSwap
 
-          val stat = "%d,%d,%d,%d,%d,%d,%d".format(System.currentTimeMillis(), values(0), values(1), values(2),
-            readRate, writeRate, swap.getUsed)
+          val stat = "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d".format(System.currentTimeMillis(), values(0), values(1), values(2),
+            readRate, writeRate, swap.getUsed, gcScavengeCollectionTime, gcScavengeCollectionTime,
+            gcMarkSweepCollectionTime,gcMarkSweepCollectionCount, uptime)
           pw.println(stat)
 
           Thread.sleep(1000)
