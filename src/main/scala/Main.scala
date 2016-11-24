@@ -30,19 +30,20 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length != 6) {
-      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesToWatermarkThreshold> <complexity> " +
+    if (args.length != 7) {
+      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesAfterSpillFactor> <tuplesToWatermarkThreshold> <complexity> " +
         "<windowDurationSec> <numberOfPastWindows> <maximumWatermarks>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesWkThreshold, complexity, windowDurationSec, numberOfPastWindows, maximumWatermarks) =
-      (args(0).toInt, args(1).toLong, args(2).toInt, args(3).toInt, args(4).toInt, args(5).toInt)
+    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec,
+    numberOfPastWindows, maximumWatermarks) =
+      (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt, args(4).toInt, args(5).toInt, args(6).toInt)
 
     val windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory))
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
