@@ -20,7 +20,6 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.util.Collector
 
-import scala.util.Random
 
 object Main {
 
