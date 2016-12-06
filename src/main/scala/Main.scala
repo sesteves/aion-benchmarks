@@ -229,9 +229,6 @@ object Main {
     val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
 
     def simpleFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
-                                 collector: Collector[(String, Int)]) =>
-      collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
-    def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
@@ -244,9 +241,40 @@ object Main {
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
       pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
     }
+
+    def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
+                                 collector: Collector[(String, Int)]) => {
+      val startTick = System.currentTimeMillis()
+      // iterator shall never be called more than once
+      val result = iterator.map(i => {
+        (1 to 10).foreach(n => n)
+        i
+      }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
+      collector.collect(result)
+      val endTick = System.currentTimeMillis()
+
+      println("### Iterator: " + result._2 + ", time: " + (endTick - startTick))
+
+      val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
+    }
+
     def complexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
-                                 collector: Collector[(String, Int)]) =>
-      collector.collect(iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2)))
+                                 collector: Collector[(String, Int)]) => {
+      val startTick = System.currentTimeMillis()
+      // iterator shall never be called more than once
+      val result = iterator.map(i => {
+        (1 to 100).foreach(n => n)
+        i
+      }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
+      collector.collect(result)
+      val endTick = System.currentTimeMillis()
+
+      println("### Iterator: " + result._2 + ", time: " + (endTick - startTick))
+
+      val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
+    }
 
 
     def function = complexity match {
