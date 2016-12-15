@@ -65,18 +65,20 @@ object DataGenerator {
           if(i == 1000000) i = 0
 
           val globalTickEnd = System.currentTimeMillis()
-          if (globalTickEnd - globalTickStart >= 1000) {
-            println(s"rate ~${count / (globalTickEnd - globalTickStart)} records / sec")
+          if (globalTickEnd - globalTickStart >= 3000) {
+            println(s"rate ~${count / ((globalTickEnd - globalTickStart) / 1000)} records / sec")
             count = 0
             globalTickStart = globalTickEnd
           }
 
           val endTick = System.nanoTime()
           val diff = endTick - startTick
+          val waitNanos = 1000000000 / ingestionRate - diff
 
-          val sleepMillis = (1000000000 / ingestionRate - diff) / 1000000
+          while (waitNanos > 0 && System.nanoTime() - endTick >= waitNanos) {
+            // do nothing
+          }
 
-          Thread.sleep(sleepMillis)
         }
 
         // println(s"${nrecords(i)} lines sent")
