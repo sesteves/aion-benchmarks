@@ -53,6 +53,7 @@ object Main {
 
     val rawStream = env.socketTextStream("localhost", 9990)
 
+    /*
     val throughputFName = s"throughput-${System.currentTimeMillis()}.txt"
     rawStream.map(_ => Tuple1(1)).keyBy(0).window(TumblingProcessingTimeWindows.of(Time.seconds(1))).sum(0)
       .map(tuple => {
@@ -60,7 +61,7 @@ object Main {
         pw.println(s"${System.currentTimeMillis()},${tuple._1}")
       })
      // .writeAsCsv("records-per-second-" + System.currentTimeMillis() + ".csv", )
-
+    */
 
     val punctuatedAssigner = new AssignerWithPunctuatedWatermarks[(String, Int, Long)] {
       // var watermarkEmitted = false

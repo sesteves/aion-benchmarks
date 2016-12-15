@@ -75,7 +75,7 @@ object DataGenerator {
           val diff = endTick - startTick
           val waitNanos = 1000000000 / ingestionRate - diff
 
-          while (waitNanos > 0 && System.nanoTime() - endTick >= waitNanos) {
+          while (waitNanos > 0 && System.nanoTime() - endTick < waitNanos) {
             // do nothing
           }
 
