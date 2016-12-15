@@ -8,14 +8,12 @@ object DataGenerator {
 
   def main(args: Array[String]): Unit = {
 
-    //    if (args.length != 3) {
-    //      System.err.println("Usage: DataGenerator <port> <nrecords> <sleepMillis>")
-    //      System.exit(1)
-    //    }
-    // Parse the arguments using a pattern match
-    //    val (port, nrecords, sleepMillis) = (args(0).toInt, args(1).toInt, args(2).toLong)
-
-    val (port, sleepMillis) = (9990, 10)
+    if (args.length != 1) {
+      System.err.println("Usage: DataGenerator <ingestionRate>")
+      System.exit(1)
+    }
+    val ingestionRate = args(0).toInt
+    val port = 9990
 
     val serverSocket = new ServerSocket(port)
     println("Listening on port " + port)
@@ -34,6 +32,8 @@ object DataGenerator {
       try {
         var i = 0
         while (true) {
+
+          val startTick = System.currentTimeMillis()
           out.write("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
@@ -57,9 +57,15 @@ object DataGenerator {
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             " 1 " + i.toString + "\n")
+          out.flush()
           i += 1
           if(i == 1000000) i = 0
-          if(i % 10000 == 0) out.flush
+          val endTick = System.currentTimeMillis()
+          val diff = endTick - startTick
+
+          val sleepMillis = (1000 - ingestionRate*diff) / ingestionRate
+
+          Thread.sleep(sleepMillis);
         }
 
         // println(s"${nrecords(i)} lines sent")
