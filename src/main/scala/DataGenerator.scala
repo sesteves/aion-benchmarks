@@ -31,9 +31,11 @@ object DataGenerator {
       val out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream))
       try {
         var i = 0
+        var count = 0
+        var globalTickStart = System.currentTimeMillis()
         while (true) {
 
-          val startTick = System.currentTimeMillis()
+          val startTick = System.nanoTime()
           out.write("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
@@ -58,14 +60,23 @@ object DataGenerator {
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" +
             " 1 " + i.toString + "\n")
           out.flush()
+          count += 1
           i += 1
           if(i == 1000000) i = 0
-          val endTick = System.currentTimeMillis()
+
+          val globalTickEnd = System.currentTimeMillis()
+          if (globalTickEnd - globalTickStart >= 1000) {
+            println(s"rate ~${count / (globalTickEnd - globalTickStart)} records / sec")
+            count = 0
+            globalTickStart = globalTickEnd
+          }
+
+          val endTick = System.nanoTime()
           val diff = endTick - startTick
 
-          val sleepMillis = (1000 - ingestionRate*diff) / ingestionRate
+          val sleepMillis = (1000000000 / ingestionRate - diff) / 1000000
 
-          Thread.sleep(sleepMillis);
+          Thread.sleep(sleepMillis)
         }
 
         // println(s"${nrecords(i)} lines sent")
