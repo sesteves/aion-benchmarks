@@ -247,9 +247,10 @@ object Main {
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
-      val result = iterator.map(i => {
-        (1 to 10).foreach(n => n)
-        i
+      val result = iterator.map(p => {
+        val startTick = System.nanoTime()
+        while(System.nanoTime() - startTick <  500000) {}
+        p
       }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
       collector.collect(result)
       val endTick = System.currentTimeMillis()
