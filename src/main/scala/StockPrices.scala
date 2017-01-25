@@ -134,13 +134,15 @@ object StockPrices {
     //for the last half minute, we keep only the counts.
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
-
     val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
       .window(TumblingProcessingTimeWindows.of(Time.of(30, TimeUnit.SECONDS))).apply((c1, c2) => (c1.count, c2.count))
 
     val rollingCorrelation = tweetsAndWarning.timeWindowAll(Time.of(30, TimeUnit.SECONDS)).apply(computeCorrelation)
 
-    rollingCorrelation.print()
+    rollingCorrelation.print
+
+
+
 
     env.execute("Stock stream")
   }
@@ -150,9 +152,11 @@ object StockPrices {
   }
 
   def mean = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[StockPrice], out: Collector[StockPrice]) => {
-    if (iterator.nonEmpty) {
-      out.collect(StockPrice(iterator.head.symbol, iterator.foldLeft(0: Double)(_ + _.price) / iterator.size))
-    }
+
+    val (symbol, priceSum, elementSum) = iterator.map(stockPrice => (stockPrice.symbol, stockPrice.price, 1))
+      .reduce((p1, p2) => (p1._1, p1._2 + p2._2, p1._3 + p2._3))
+    out.collect(StockPrice(symbol, priceSum / elementSum))
+
   }
 
   def sendWarning = (key: Tuple, globalWindow: GlobalWindow, iterator: Iterable[StockPrice], out: Collector[String]) => {
@@ -177,9 +181,11 @@ object StockPrices {
   def generateStock(symbol: String)(sigma: Int) = {
     var price = 1000.0
     (context: SourceContext[StockPrice]) =>
-      price = price + Random.nextGaussian * sigma
-      Thread.sleep(Random.nextInt(200))
-      context.collect(StockPrice(symbol, price))
+      while(true) {
+        price = price + Random.nextGaussian * sigma
+        Thread.sleep(Random.nextInt(200))
+        context.collect(StockPrice(symbol, price))
+      }
   }
 
   def average[T](ts: Iterable[T])(implicit num: Numeric[T]) = {
@@ -188,9 +194,11 @@ object StockPrices {
 
   def generateTweets = {
     (context: SourceContext[String]) =>
-      val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
-      Thread.sleep(Random.nextInt(500))
-      context.collect(s.mkString(" "))
+      while(true) {
+        val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
+        Thread.sleep(Random.nextInt(500))
+        context.collect(s.mkString(" "))
+      }
   }
 
   private def parseParameters(args: Array[String]): Boolean = {
