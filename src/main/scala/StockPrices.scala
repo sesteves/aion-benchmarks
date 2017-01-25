@@ -16,9 +16,16 @@
  * limitations under the License.
  */
 
-import java.util.concurrent.TimeUnit._
+import java.util.concurrent.TimeUnit
 
+import org.apache.flink.api.java.tuple.Tuple
+import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
+import org.apache.flink.streaming.api.functions.windowing.delta.DeltaFunction
 import org.apache.flink.streaming.api.scala._
+import org.apache.flink.streaming.api.windowing.assigners.{GlobalWindows, TumblingProcessingTimeWindows}
+import org.apache.flink.streaming.api.windowing.time.Time
+import org.apache.flink.streaming.api.windowing.triggers.DeltaTrigger
+import org.apache.flink.streaming.api.windowing.windows.{GlobalWindow, TimeWindow}
 import org.apache.flink.util.Collector
 
 import scala.util.Random
@@ -92,42 +99,34 @@ object StockPrices {
 
     //Step 2
     //Compute some simple statistics on a rolling window
-    val windowedStream = stockStream.window(Time.of(10, SECONDS)).every(Time.of(5, SECONDS))
+    val windowedStream = stockStream.keyBy("symbol", "price")
+      .timeWindow(Time.of(10, TimeUnit.SECONDS), Time.of(5, TimeUnit.SECONDS))
 
     val lowest = windowedStream.minBy("price")
-    val maxByStock = windowedStream.groupBy("symbol").maxBy("price").getDiscretizedStream
-    val rollingMean = windowedStream.groupBy("symbol").mapWindow(mean _).getDiscretizedStream
+    val maxByStock = windowedStream.maxBy("price")
+    val rollingMean = windowedStream.apply(mean)
+
 
     //Step 3
     //Use delta policy to create price change warnings,
     // and also count the number of warning every half minute
+    val priceWarnings = stockStream.keyBy("symbol").window(GlobalWindows.create())
+      // TODO: check whether eviction is needed:       .evictor()  https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
+      .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
+      .apply(sendWarning)
 
-    val priceWarnings = stockStream.groupBy("symbol")
-      .window(Delta.of(0.05, priceChange, defaultPrice))
-      .mapWindow(sendWarning _)
-      .flatten()
-
-    val warningsPerStock = priceWarnings
-      .map(Count(_, 1))
-      .window(Time.of(30, SECONDS))
-      .groupBy("symbol")
+    val warningsPerStock = priceWarnings.map(Count(_, 1)).keyBy("symbol").timeWindow(Time.of(30, TimeUnit.SECONDS))
       .sum("count")
-      .flatten()
 
     //Step 4
     //Read a stream of tweets and extract the stock symbols
-
     val tweetStream = env.addSource(generateTweets)
 
-    val mentionedSymbols = tweetStream.flatMap(tweet => tweet.split(" "))
-      .map(_.toUpperCase())
+    val mentionedSymbols = tweetStream.flatMap(tweet => tweet.split(" ")).map(_.toUpperCase())
       .filter(symbols.contains(_))
 
-    val tweetsPerStock = mentionedSymbols.map(Count(_, 1))
-      .window(Time.of(30, SECONDS))
-      .groupBy("symbol")
+    val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(Time.of(30, TimeUnit.SECONDS))
       .sum("count")
-      .flatten()
 
     //Step 5
     //For advanced analysis we join the number of tweets and
@@ -136,41 +135,31 @@ object StockPrices {
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
 
-    val tweetsAndWarning = warningsPerStock
-      .join(tweetsPerStock)
-      .onWindow(30, SECONDS)
-      .where("symbol")
-      .equalTo("symbol") { (c1, c2) => (c1.count, c2.count) }
+    val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
+      .window(TumblingProcessingTimeWindows.of(Time.of(30, TimeUnit.SECONDS))).apply((c1, c2) => (c1.count, c2.count))
 
+    val rollingCorrelation = tweetsAndWarning.timeWindowAll(Time.of(30, TimeUnit.SECONDS)).apply(computeCorrelation)
 
-    val rollingCorrelation = tweetsAndWarning.window(Time.of(30, SECONDS))
-      .mapWindow(computeCorrelation _)
-      .flatten()
-
-    if (fileOutput) {
-      rollingCorrelation.writeAsText(outputPath, 1)
-    } else {
-      rollingCorrelation.print
-    }
+    rollingCorrelation.print()
 
     env.execute("Stock stream")
   }
 
-  def priceChange(p1: StockPrice, p2: StockPrice): Double = {
-    Math.abs(p1.price / p2.price - 1)
+  def priceChange = new DeltaFunction[StockPrice] {
+    override def getDelta(oldSP: StockPrice, newSP: StockPrice) = Math.abs(oldSP.price / newSP.price - 1)
   }
 
-  def mean(ts: Iterable[StockPrice], out: Collector[StockPrice]) = {
-    if (ts.nonEmpty) {
-      out.collect(StockPrice(ts.head.symbol, ts.foldLeft(0: Double)(_ + _.price) / ts.size))
+  def mean = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[StockPrice], out: Collector[StockPrice]) => {
+    if (iterator.nonEmpty) {
+      out.collect(StockPrice(iterator.head.symbol, iterator.foldLeft(0: Double)(_ + _.price) / iterator.size))
     }
   }
 
-  def sendWarning(ts: Iterable[StockPrice], out: Collector[String]) = {
-    if (ts.nonEmpty) out.collect(ts.head.symbol)
+  def sendWarning = (key: Tuple, globalWindow: GlobalWindow, iterator: Iterable[StockPrice], out: Collector[String]) => {
+    if (iterator.nonEmpty) out.collect(iterator.head.symbol)
   }
 
-  def computeCorrelation(input: Iterable[(Int, Int)], out: Collector[Double]) = {
+  def computeCorrelation = (timeWindow: TimeWindow, input: Iterable[(Int, Int)], out: Collector[Double]) => {
     if (input.nonEmpty) {
       val var1 = input.map(_._1)
       val mean1 = average(var1)
@@ -187,11 +176,10 @@ object StockPrices {
 
   def generateStock(symbol: String)(sigma: Int) = {
     var price = 1000.0
-    () =>
+    (context: SourceContext[StockPrice]) =>
       price = price + Random.nextGaussian * sigma
       Thread.sleep(Random.nextInt(200))
-      StockPrice(symbol, price)
-
+      context.collect(StockPrice(symbol, price))
   }
 
   def average[T](ts: Iterable[T])(implicit num: Numeric[T]) = {
@@ -199,10 +187,10 @@ object StockPrices {
   }
 
   def generateTweets = {
-    () =>
+    (context: SourceContext[String]) =>
       val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
       Thread.sleep(Random.nextInt(500))
-      s.mkString(" ")
+      context.collect(s.mkString(" "))
   }
 
   private def parseParameters(args: Array[String]): Boolean = {
