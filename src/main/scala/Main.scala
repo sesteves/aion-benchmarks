@@ -29,16 +29,17 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length != 7) {
+    if (args.length != 8) {
       System.err.println("Usage: Main <maxTuplesInMemory> <tuplesAfterSpillFactor> <tuplesToWatermarkThreshold> <complexity> " +
-        "<windowDurationSec> <numberOfPastWindows> <maximumWatermarks>")
+        "<windowDurationSec> <slideDurationSec> <numberOfPastWindows> <maximumWatermarks>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec,
-    numberOfPastWindows, maximumWatermarks) =
-      (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt, args(4).toInt, args(5).toInt, args(6).toInt)
+    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec, slideDurationSec,
+    numberOfPastWindows, maximumWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
+      args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
 
-    val windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
+//    val windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
+    val slideDurationMillis = TimeUnit.SECONDS.toMillis(slideDurationSec)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
@@ -91,10 +92,10 @@ object Main {
 
         val ts = System.currentTimeMillis()
         if(windowMaxTS < 0) {
-          windowMaxTS = ts - (ts % windowDurationMillis) + windowDurationMillis
+          windowMaxTS = ts - (ts % slideDurationMillis) + slideDurationMillis
           println(s"### setting window maxTS to: $windowMaxTS, ts: $ts")
         }
-        ts - windowIndex * windowDurationMillis
+        ts - windowIndex * slideDurationMillis
       }
 
       override def checkAndGetNextWatermark(lastElement: (String, Int, Long), extractedTimestamp: Long): Watermark = {
@@ -103,18 +104,11 @@ object Main {
           watermarkCount += 1
           if(watermarkCount == maximumWatermarks) System.exit(0)
 
-          windowMaxTS = extractedTimestamp - (extractedTimestamp % windowDurationMillis) + windowDurationMillis
+          windowMaxTS = extractedTimestamp - (extractedTimestamp % slideDurationMillis) + slideDurationMillis
           println(s"### Emitting watermark at ts: $extractedTimestamp, windowsMaxTS: $windowMaxTS")
           new Watermark(extractedTimestamp)
-        } else
-          null
+        } else null
 
-//        if(!watermarkEmitted && lastElement._3 > tuplesWkThreshold) {
-//          watermarkEmitted = true
-//          val ts = extractedTimestamp / 100000 * 100000 + TimeUnit.MINUTES.toMillis(5)
-//          // println(s"### emitting watermark at ts: $ts")
-//          new watermark.Watermark(ts)
-//        } else null
       }
     }
 
@@ -285,19 +279,20 @@ object Main {
       case 2 => complexFunction
     }
 
-    stream.keyBy(1)
-      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
-        TimeUnit.NANOSECONDS))
-      .trigger(trigger3)
-//      .trigger(trigger2)
-        // .apply(myFunction)
-        .apply(function)
-//      .sum(1)[INFO] flink-cep ......................................... SUCCESS [2.819s]
+    // thumbling window
+//    stream.keyBy(1)
+//      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+//      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
+//        TimeUnit.NANOSECONDS))
+//      .trigger(trigger3)
+//        .apply(function)
 
-//        .reduce((p1, p2) => (p1._1, p1._2 + p2._2))
-//        .max(0)
-      //.print()
+
+    // sliding window
+    stream.keyBy(1)
+      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(slideDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
+        TimeUnit.NANOSECONDS)).trigger(trigger3).apply(function);
 
 
     val result = env.execute()
