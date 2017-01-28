@@ -130,21 +130,6 @@ object Main {
       .withAllowedLateness(Time.seconds(2))
       .accumulating()
 
-//    val trigger2 = new Trigger[Any, TimeWindow] {
-//      var count = 0
-//
-//      def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-//        count += 1
-//        if (count % 100000 == 0) return TriggerResult.FIRE else return TriggerResult.CONTINUE
-//      }
-//
-//      def onProcessingTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-//        TriggerResult.FIRE
-//
-//      def onEventTime(l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult =
-//        TriggerResult.FIRE
-//    }
-
     val fireFName = s"fire-${System.currentTimeMillis()}.txt"
     val fireAndPurgeFName = s"fire-and-purge-${System.currentTimeMillis()}.txt"
 
@@ -243,7 +228,7 @@ object Main {
       // iterator shall never be called more than once
       val result = iterator.map(p => {
         val startTick = System.nanoTime()
-        while(System.nanoTime() - startTick <  500000) {}
+        while(System.nanoTime() - startTick <  360) {}
         p
       }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
       collector.collect(result)
