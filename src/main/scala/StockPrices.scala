@@ -18,11 +18,18 @@
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.flink.api.common.ExecutionConfig
 import org.apache.flink.api.java.tuple.Tuple
+import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
+import org.apache.flink.streaming.api.TimeCharacteristic
+import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
 import org.apache.flink.streaming.api.functions.windowing.delta.DeltaFunction
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.streaming.api.windowing.assigners.{GlobalWindows, TumblingProcessingTimeWindows}
+import org.apache.flink.streaming.api.scala.function.WindowFunction
+import org.apache.flink.streaming.api.watermark.Watermark
+import org.apache.flink.streaming.api.windowing.assigners.{GlobalWindows, SlidingEventTimeWindows, TumblingProcessingTimeWindows}
+import org.apache.flink.streaming.api.windowing.evictors.TimeEvictor
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.DeltaTrigger
 import org.apache.flink.streaming.api.windowing.windows.{GlobalWindow, TimeWindow}
@@ -59,12 +66,12 @@ import scala.util.Random
   */
 object StockPrices {
 
-  case class StockPrice(symbol: String, price: Double)
+  case class StockPrice(symbol: String, price: Double, ts: Long)
   case class Count(symbol: String, count: Int)
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
 
-  val defaultPrice = StockPrice("", 1000)
+  val defaultPrice = StockPrice("", 1000, -1)
 
   private var fileOutput: Boolean = false
   private var hostName: String = null
@@ -73,20 +80,29 @@ object StockPrices {
 
   def main(args: Array[String]) {
 
-    if (!parseParameters(args)) {
-      return
-    }
+//    if (!parseParameters(args)) {
+//      return
+//    }
+
+    val maxTuplesInMemory = 0
+    val tuplesAfterSpillFactor = 0
+    val windowDurationSec = 30
+    val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
+    val numberOfPastWindows = 2
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
+    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+    env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
+    // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
 
     //Step 1
     //Read a stream of stock prices from different sources and union it into one stream
 
     //Read from a socket stream at map it to StockPrice objects
-    val socketStockStream = env.socketTextStream(hostName, port).map(x => {
-      val split = x.split(",")
-      StockPrice(split(0), split(1).toDouble)
-    })
+//    val socketStockStream = env.socketTextStream(hostName, port).map(x => {
+//      val split = x.split(",")
+//      StockPrice(split(0), split(1).toDouble)
+//    })
 
     //Generate other stock streams
     val SPX_Stream = env.addSource(generateStock("SPX")(10))
@@ -95,38 +111,63 @@ object StockPrices {
     val BUX_Stream = env.addSource(generateStock("BUX")(40))
 
     //Union all stock streams together
-    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
+//    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
+    val stockStream = SPX_Stream.union(FTSE_Stream, DJI_Stream, BUX_Stream)
 
     //Step 2
     //Compute some simple statistics on a rolling window
-    val windowedStream = stockStream.keyBy("symbol", "price")
+    val windowedAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
+      override def extractTimestamp(t: StockPrice, l: Long) = t.ts
+      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+    }
+
+    val windowedStream = stockStream.assignTimestampsAndWatermarks(windowedAssigner).keyBy("symbol", "price")
       .timeWindow(Time.of(10, TimeUnit.SECONDS), Time.of(5, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(10) * numberOfPastWindows - 1 , TimeUnit.NANOSECONDS))
 
     val lowest = windowedStream.minBy("price")
     val maxByStock = windowedStream.maxBy("price")
     val rollingMean = windowedStream.apply(mean)
 
-
     //Step 3
     //Use delta policy to create price change warnings,
     // and also count the number of warning every half minute
-    val priceWarnings = stockStream.keyBy("symbol").window(GlobalWindows.create())
-      // TODO: check whether eviction is needed:       .evictor()  https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
+    val warningAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
+      override def extractTimestamp(t: StockPrice, l: Long) = t.ts
+      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+    }
+    val warningPerStockAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
+      override def extractTimestamp(t: (String, Long), l: Long) = t._2
+      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+    }
+
+    // TODO: check whether eviction is needed:       .evictor()  https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
+    val priceWarnings = stockStream.assignTimestampsAndWatermarks(warningAssigner).keyBy("symbol")
+      .window(GlobalWindows.create()).evictor(TimeEvictor.of(Time.of(windowDurationSec, TimeUnit.SECONDS)))
+      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS))
       .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
       .apply(sendWarning)
 
-    val warningsPerStock = priceWarnings.map(Count(_, 1)).keyBy("symbol").timeWindow(Time.of(30, TimeUnit.SECONDS))
-      .sum("count")
+    val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
+      .map(t => Count(t._1, 1)).keyBy("symbol")
+      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)).sum("count")
 
     //Step 4
     //Read a stream of tweets and extract the stock symbols
-    val tweetStream = env.addSource(generateTweets)
+    val tweetAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
+      override def extractTimestamp(t: (String, Long), l: Long) = t._2
+      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+    }
+
+    val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
 
     val mentionedSymbols = tweetStream.flatMap(tweet => tweet.split(" ")).map(_.toUpperCase())
       .filter(symbols.contains(_))
 
-    val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(Time.of(30, TimeUnit.SECONDS))
-      .sum("count")
+    val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol")
+      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)).sum("count")
 
     //Step 5
     //For advanced analysis we join the number of tweets and
@@ -135,12 +176,20 @@ object StockPrices {
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
     val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
-      .window(TumblingProcessingTimeWindows.of(Time.of(30, TimeUnit.SECONDS))).apply((c1, c2) => (c1.count, c2.count))
+        .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
+          TimeUnit.SECONDS)))
+      .apply((c1, c2) => (c1.count, c2.count))
 
-    val rollingCorrelation = tweetsAndWarning.timeWindowAll(Time.of(30, TimeUnit.SECONDS)).apply(computeCorrelation)
+    // TODO missing lateness
+
+    tweetsAndWarning.print()
+
+    // TODO assign timestamps
+    val rollingCorrelation = tweetsAndWarning.timeWindowAll(Time.of(windowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS))
+      .apply(computeCorrelation)
 
     rollingCorrelation.print
-
 
 
 
@@ -155,12 +204,16 @@ object StockPrices {
 
     val (symbol, priceSum, elementSum) = iterator.map(stockPrice => (stockPrice.symbol, stockPrice.price, 1))
       .reduce((p1, p2) => (p1._1, p1._2 + p2._2, p1._3 + p2._3))
-    out.collect(StockPrice(symbol, priceSum / elementSum))
+    out.collect(StockPrice(symbol, priceSum / elementSum, timeWindow.maxTimestamp()))
 
   }
 
-  def sendWarning = (key: Tuple, globalWindow: GlobalWindow, iterator: Iterable[StockPrice], out: Collector[String]) => {
-    if (iterator.nonEmpty) out.collect(iterator.head.symbol)
+  def sendWarning = (key: Tuple, globalWindow: GlobalWindow, iterator: Iterable[StockPrice],
+                     out: Collector[(String, Long)]) => {
+    if (iterator.nonEmpty) {
+      val head = iterator.head
+      out.collect((head.symbol, head.ts))
+    }
   }
 
   def computeCorrelation = (timeWindow: TimeWindow, input: Iterable[(Int, Int)], out: Collector[Double]) => {
@@ -184,7 +237,9 @@ object StockPrices {
       while(true) {
         price = price + Random.nextGaussian * sigma
         Thread.sleep(Random.nextInt(200))
-        context.collect(StockPrice(symbol, price))
+
+        val ts = System.currentTimeMillis()
+        context.collect(StockPrice(symbol, price, ts))
       }
   }
 
@@ -193,11 +248,13 @@ object StockPrices {
   }
 
   def generateTweets = {
-    (context: SourceContext[String]) =>
+    (context: SourceContext[(String, Long)]) =>
       while(true) {
         val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
         Thread.sleep(Random.nextInt(500))
-        context.collect(s.mkString(" "))
+
+        val ts = System.currentTimeMillis()
+        context.collect((s.mkString(" "), ts))
       }
   }
 
