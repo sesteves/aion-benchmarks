@@ -18,6 +18,7 @@
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.common.ExecutionConfig
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
@@ -78,6 +79,13 @@ object StockPrices {
   private var port: Int = 0
   private var outputPath: String = null
 
+  // scale and shape (or mean and stddev) are 0 and 1 respectively
+  private val logNormalDist = new LogNormalDistribution()
+
+  private var numberOfPastWindows: Int = _
+
+  private var windowDurationMillis: Long = _
+
   def main(args: Array[String]) {
 
 //    if (!parseParameters(args)) {
@@ -89,6 +97,9 @@ object StockPrices {
     val windowDurationSec = 30
     val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
     val numberOfPastWindows = 2
+
+    this.windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
+    this.numberOfPastWindows = numberOfPastWindows
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
@@ -176,10 +187,9 @@ object StockPrices {
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
     val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
-        .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
+      .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
           TimeUnit.SECONDS)))
       .apply((c1, c2) => (c1.count, c2.count))
-
     // TODO missing lateness
 
     tweetsAndWarning.print()
@@ -231,6 +241,11 @@ object StockPrices {
     }
   }
 
+  def sample(): Int = {
+    val i = math.round(logNormalDist.sample()).toInt - 1
+    if(i <= numberOfPastWindows) { if(i < 0) 0 else i } else sample()
+  }
+
   def generateStock(symbol: String)(sigma: Int) = {
     var price = 1000.0
     (context: SourceContext[StockPrice]) =>
@@ -238,7 +253,8 @@ object StockPrices {
         price = price + Random.nextGaussian * sigma
         Thread.sleep(Random.nextInt(200))
 
-        val ts = System.currentTimeMillis()
+        val windowIndex = sample()
+        val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
         context.collect(StockPrice(symbol, price, ts))
       }
   }
@@ -253,7 +269,8 @@ object StockPrices {
         val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
         Thread.sleep(Random.nextInt(500))
 
-        val ts = System.currentTimeMillis()
+        val windowIndex = sample()
+        val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
         context.collect((s.mkString(" "), ts))
       }
   }
