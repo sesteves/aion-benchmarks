@@ -2,6 +2,8 @@ import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
 import FFT.Complex
+import breeze.math.Complex
+import breeze.signal.fourierTr
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
@@ -247,7 +249,7 @@ object Main {
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
-      val (str, list) = iterator.foldLeft(("", List.empty[Complex]))((acc, p) => (p._1, acc._2 :+ Complex(p._2)))
+      val (str, list) = iterator.foldLeft(("", Array.empty[Complex]))((acc, p) => (p._1, acc._2 :+ Complex(p._2)))
       val f = if(list.size % 2 == 0) list else list :+ Complex(1)
       FFT.fft(f).foreach(c => collector.collect((str, c.re.toInt)))
       val endTick = System.currentTimeMillis()
