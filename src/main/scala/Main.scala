@@ -1,6 +1,7 @@
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
+import FFT.Complex
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.scala._
 import org.apache.flink.api.common.accumulators.{Accumulator, IntCounter, SimpleAccumulator}
@@ -212,14 +213,16 @@ object Main {
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
-      val result = iterator.reduce((p1, p2) => (p1._1, p1._2 + p2._2))
-      collector.collect(result)
+      val (str, sum, size) =
+        iterator.map(t => (t._1, t._2, 1)).reduce((t1, t2) => (t1._1, t1._2 + t2._2, t1._3 + t2._3))
+
+      collector.collect((str, sum / size))
       val endTick = System.currentTimeMillis()
 
-      println("### Iterator: " + result._2 + ", time: " + (endTick - startTick))
+      println("### Iterator: " + size + ", time: " + (endTick - startTick))
 
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${size}")
     }
 
     def fairlyComplexFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
@@ -244,17 +247,14 @@ object Main {
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
-      val result = iterator.map(i => {
-        (1 to 100).foreach(n => n)
-        i
-      }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
-      collector.collect(result)
+      val (str, seq) = iterator.foldLeft(("", Seq.empty[Complex]))((acc, p) => (p._1, acc._2 :+ FFT.real(p._2)))
+      FFT.fft(seq).foreach(c => collector.collect((str, c.re.toInt)))
       val endTick = System.currentTimeMillis()
 
-      println("### Iterator: " + result._2 + ", time: " + (endTick - startTick))
+      println("### Iterator: " + seq.size + ", time: " + (endTick - startTick))
 
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${result._2}")
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${seq.size}")
     }
 
 
@@ -265,19 +265,17 @@ object Main {
     }
 
     // thumbling window
-//    stream.keyBy(1)
-//      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
-//      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
-//        TimeUnit.NANOSECONDS))
-//      .trigger(trigger3)
-//        .apply(function)
+    stream.keyBy(1).timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
+        TimeUnit.NANOSECONDS))
+      .trigger(trigger3).apply(function)
 
 
     // sliding window
-    stream.keyBy(1)
-      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(slideDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
-        TimeUnit.NANOSECONDS)).trigger(trigger3).apply(function);
+//    stream.keyBy(1)
+//      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(slideDurationSec, TimeUnit.SECONDS))
+//      .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
+//        TimeUnit.NANOSECONDS)).trigger(trigger3).apply(function);
 
 
     val result = env.execute()
