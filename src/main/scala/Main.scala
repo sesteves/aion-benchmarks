@@ -208,7 +208,7 @@ object Main {
 
 
     def padder(data:List[Complex]) : List[Complex] = {
-      def check(num:Int) : Boolean = if((num.&(num-1)) == 0) true else false
+      def check(num:Int) : Boolean = (num.&(num-1)) == 0
       def pad(i:Int) : Int = {
         check(i) match {
           case true => i
@@ -261,8 +261,9 @@ object Main {
       val (str, list) = iterator.foldLeft(("", List.empty[Complex]))((acc, p) => (p._1, acc._2 :+ Complex(p._2)))
 
       // add zero padding if list size not power of 2
-      padder(list)
-      FFT.fft(list).foreach(c => collector.collect((str, c.re.toInt)))
+      val paddedList = padder(list)
+
+      FFT.fft(paddedList).foreach(c => collector.collect((str, c.re.toInt)))
       val endTick = System.currentTimeMillis()
 
       println("### Iterator: " + list.size + ", time: " + (endTick - startTick))
