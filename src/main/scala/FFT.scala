@@ -44,9 +44,7 @@ object FFT {
       return cSeq
     }
     val n = cSeq.length
-
-    if(n % 2 != 0) cSeq.drop(1)
-    // assume(n % 2 == 0, "The Cooley-Tukey FFT algorithm only works when the length of the input is even.")
+    assume(n % 2 == 0, "The Cooley-Tukey FFT algorithm only works when the length of the input is even.")
 
     val evenOddPairs = cSeq.grouped(2).toSeq
     val evens = _fft(evenOddPairs map (_ (0)), direction, scalar)

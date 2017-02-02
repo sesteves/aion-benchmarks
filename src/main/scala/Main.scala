@@ -248,7 +248,8 @@ object Main {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
       val (str, seq) = iterator.foldLeft(("", Seq.empty[Complex]))((acc, p) => (p._1, acc._2 :+ FFT.real(p._2)))
-      FFT.fft(seq).foreach(c => collector.collect((str, c.re.toInt)))
+      val cSeq = if(seq.size % 2 == 0) seq else seq :+ FFT.real(1)
+      FFT.fft(cSeq).foreach(c => collector.collect((str, c.re.toInt)))
       val endTick = System.currentTimeMillis()
 
       println("### Iterator: " + seq.size + ", time: " + (endTick - startTick))
