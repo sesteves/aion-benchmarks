@@ -2,58 +2,67 @@
   * Created by Sergio on 01/02/2017.
   */
 
-import scala.math.{ Pi, cos, sin }
+import scala.math.{ Pi, cos, sin, cosh, sinh, abs }
 
 /**
   *  Cooley-Tukey FFT
   */
 object FFT {
-  case class Complex(re: Double, im: Double = 0.0) {
-    def +(x: Complex): Complex = Complex((this.re+x.re), (this.im+x.im))
-    def -(x: Complex): Complex = Complex((this.re-x.re), (this.im-x.im))
-    def *(x: Complex): Complex = Complex(this.re*x.re-this.im*x.im, this.re*x.im+this.im*x.re)
-  }
 
-  def transformReal(input:IndexedSeq[Double]) = {
-    val data = padder(input.map(i => Complex(i)).toList)
-    val outComplex = fft(data)
-    outComplex.map(c => math.sqrt((c.re * c.re) + (c.im * c.im))).take((data.length / 2) + 1).toIndexedSeq // Magnitude Output
-  }
+  case class Complex(re: Double, im: Double = 0) {
+    def +(x: Complex): Complex = Complex(re + x.re, im + x.im)
 
-  def powerSpectrum(input:IndexedSeq[Double]) = {
-    val data = padder(input.map(i => Complex(i)).toList)
-    val outComplex = fft(data)
-    val out = outComplex.map(c => math.sqrt((c.re * c.re) + (c.im * c.im))).take((data.length / 2) + 1).toIndexedSeq
-    out.map(i => (i * i) / data.length) // Power Spectral Density Output
-  }
+    def -(x: Complex): Complex = Complex(re - x.re, im - x.im)
 
-  def padder(data:List[Complex]) : List[Complex] = {
-    def check(num:Int) : Boolean = if((num.&(num-1)) == 0) true else false
-    def pad(i:Int) : Int = {
-      check(i) match {
-        case true => i
-        case false => pad(i + 1)
-      }
-    }
-    if(check(data.length) == true) data else data.padTo(pad(data.length), Complex(0))
-  }
+    def *(x: Double): Complex = Complex(re * x, im * x)
 
-  def fft(f: List[Complex]) : List[Complex] = {
-    f.size match {
-      case 0 => Nil
-      case 1 => f
-      case n => {
-        val c: Double => Complex = phi => Complex(cos(phi), sin(phi))
-        val e = fft(f.zipWithIndex.filter(_._2%2==0).map(_._1))
-        val o  = fft(f.zipWithIndex.filter(_._2%2!=0).map(_._1))
-        def it(in:List[(Int, Complex)], k:Int = 0) : List[(Int, Complex)] = {
-          k < (n / 2) match {
-            case true => it( (k+n/2,e(k)-o(k)*c(-2*Pi*k/n)) :: (k,e(k)+o(k)*c(-2*Pi*k/n)) :: in, k + 1)
-            case false => in
-          }
-        }
-        it(List[(Int, Complex)]()).sortWith((x,y) => x._1 < y._1).map(_._2)
+    def *(x: Complex): Complex = Complex(re * x.re - im * x.im, re * x.im + im * x.re)
+
+    def /(x: Double): Complex = Complex(re / x, im / x)
+
+    override def toString(): String = {
+      val a = "%1.3f" format re
+      val b = "%1.3f" format abs(im)
+      (a, b) match {
+        case (_, "0.000") => a
+        case ("0.000", _) => b + "i"
+        case (_, _) if im > 0 => a + " + " + b + "i"
+        case (_, _) => a + " - " + b + "i"
       }
     }
   }
+
+  def real(re: Double) = Complex(re, 0)
+
+  def exp(c: Complex): Complex = {
+    val r = (cosh(c.re) + sinh(c.re))
+    Complex(cos(c.im), sin(c.im)) * r
+  }
+
+  def _fft(cSeq: Seq[Complex], direction: Complex, scalar: Int): Seq[Complex] = {
+    if (cSeq.length == 1) {
+      return cSeq
+    }
+    val n = cSeq.length
+    assume(n % 2 == 0, "The Cooley-Tukey FFT algorithm only works when the length of the input is even.")
+
+    val evenOddPairs = cSeq.grouped(2).toSeq
+    val evens = _fft(evenOddPairs map (_ (0)), direction, scalar)
+    val odds = _fft(evenOddPairs map (_ (1)), direction, scalar)
+
+    def leftRightPair(k: Int): Pair[Complex, Complex] = {
+      val base = evens(k) / scalar
+      val offset = exp(direction * (Pi * k / n)) * odds(k) / scalar
+      (base + offset, base - offset)
+    }
+
+    val pairs = (0 until n / 2) map leftRightPair
+    val left = pairs map (_._1)
+    val right = pairs map (_._2)
+    left ++ right
+  }
+
+  def fft(cSeq: Seq[Complex]): Seq[Complex] = _fft(cSeq, Complex(0, 2), 1)
+
+  def rfft(cSeq: Seq[Complex]): Seq[Complex] = _fft(cSeq, Complex(0, -2), 2)
 }
