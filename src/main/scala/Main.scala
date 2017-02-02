@@ -247,15 +247,15 @@ object Main {
                                  collector: Collector[(String, Int)]) => {
       val startTick = System.currentTimeMillis()
       // iterator shall never be called more than once
-      val (str, seq) = iterator.foldLeft(("", Seq.empty[Complex]))((acc, p) => (p._1, acc._2 :+ FFT.real(p._2)))
-      val cSeq = if(seq.size % 2 == 0) seq else seq :+ FFT.real(1)
-      FFT.fft(cSeq).foreach(c => collector.collect((str, c.re.toInt)))
+      val (str, list) = iterator.foldLeft(("", List.empty[Complex]))((acc, p) => (p._1, acc._2 :+ Complex(p._2)))
+      val f = if(list.size % 2 == 0) list else list :+ Complex(1)
+      FFT.fft(f).foreach(c => collector.collect((str, c.re.toInt)))
       val endTick = System.currentTimeMillis()
 
-      println("### Iterator: " + seq.size + ", time: " + (endTick - startTick))
+      println("### Iterator: " + list.size + ", time: " + (endTick - startTick))
 
       val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${seq.size}")
+      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${list.size}")
     }
 
 
