@@ -71,6 +71,7 @@ object Main {
 
       // scale and shape (or mean and stddev) are 0 and 1 respectively
       val logNormalDist = new LogNormalDistribution()
+      logNormalDist.reseedRandomGenerator(100)
 
 //      @transient
 //      var random: Random = null
