@@ -186,6 +186,14 @@ object StockPrices {
     //for the last half minute, we keep only the counts.
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
+
+
+    warningsPerStock.union(tweetsPerStock).keyBy("symbol")
+
+
+
+
+
     val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
       .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
           TimeUnit.SECONDS)))

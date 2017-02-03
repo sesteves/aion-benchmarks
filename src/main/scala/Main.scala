@@ -246,6 +246,13 @@ object Main {
         while(System.nanoTime() - startTick <  360) {}
         p
       }).reduce((p1, p2) => (p1._1, p1._2 + p2._2))
+
+
+      // n grams
+      words.split(' ').sliding(2).foreach( p => println(p.mkString))
+
+
+
       collector.collect(result)
       val endTick = System.currentTimeMillis()
 
