@@ -98,6 +98,9 @@ object StockPrices {
     val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
     val numberOfPastWindows = 2
 
+    val windowDuration = Time.of(windowDurationSec, TimeUnit.SECONDS)
+    val lateness = Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)
+
     this.windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
     this.numberOfPastWindows = numberOfPastWindows
 
@@ -160,9 +163,7 @@ object StockPrices {
       .apply(sendWarning)
 
     val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
-      .map(t => Count(t._1, 1)).keyBy("symbol")
-      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)).sum("count")
+      .map(t => Count(t._1, 1)).keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness).sum("count")
 
     //Step 4
     //Read a stream of tweets and extract the stock symbols
@@ -176,9 +177,9 @@ object StockPrices {
     val mentionedSymbols = tweetStream.flatMap(tweet => tweet.split(" ")).map(_.toUpperCase())
       .filter(symbols.contains(_))
 
-    val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol")
-      .timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)).sum("count")
+    // TODO  does the stream loses timestamp reference when applying map transformations?
+    val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(windowDuration)
+      .allowedLateness(lateness).sum("count")
 
     //Step 5
     //For advanced analysis we join the number of tweets and
@@ -186,30 +187,22 @@ object StockPrices {
     //for the last half minute, we keep only the counts.
     //This information is used to compute rolling correlations
     //between the tweets and the price changes
+    val tweetsAndWarning = warningsPerStock.union(tweetsPerStock).keyBy("symbol")
+      .timeWindow(windowDuration).allowedLateness(lateness)
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
+        in.groupBy(_.symbol).foreach({case (_, it) => out.collect((it.head.count, it.last.count)) })
+    })
 
-
-    warningsPerStock.union(tweetsPerStock).keyBy("symbol")
-
-
-
-
-
-    val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
-      .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
-          TimeUnit.SECONDS)))
-      .apply((c1, c2) => (c1.count, c2.count))
-    // TODO missing lateness
-
-    tweetsAndWarning.print()
+//    val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
+//      .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
+//          TimeUnit.SECONDS)))
+//      .apply((c1, c2) => (c1.count, c2.count))
 
     // TODO assign timestamps
-    val rollingCorrelation = tweetsAndWarning.timeWindowAll(Time.of(windowDurationSec, TimeUnit.SECONDS))
-      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS))
+    val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness)
       .apply(computeCorrelation)
 
     rollingCorrelation.print
-
-
 
     env.execute("Stock stream")
   }
