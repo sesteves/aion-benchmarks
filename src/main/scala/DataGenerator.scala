@@ -70,7 +70,7 @@ object DataGenerator {
           } else if(workload == 1) {
             out.write(lines.get(lineIndex))
             lineIndex += 1
-            if(lineIndex == lines.size) lineIndex = 0
+            if(lineIndex == lines.get.size) lineIndex = 0
           }
 
           out.flush()
