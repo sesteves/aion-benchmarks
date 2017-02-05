@@ -20,11 +20,10 @@ object DataGenerator {
 
     val lines = if(workload == 1) {
       val filename = "twitter-sample.txt"
-      Some(Source.fromFile(filename).getLines().toList)
+      Some(Source.fromFile(filename).getLines().toArray)
     } else {
       None
     }
-    var lineIndex = 0
 
     val serverSocket = new ServerSocket(port)
     println("Listening on port " + port)
@@ -38,6 +37,7 @@ object DataGenerator {
       try {
         var i = 0
         var count = 0
+        var lineIndex = 0
         var globalTickStart = System.currentTimeMillis()
         while (true) {
 
@@ -69,6 +69,7 @@ object DataGenerator {
               " 1 " + i.toString + "\n")
           } else if(workload == 1) {
             out.write(lines.get(lineIndex))
+            out.newLine()
             lineIndex += 1
             if(lineIndex == lines.get.size) lineIndex = 0
           }

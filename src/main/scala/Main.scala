@@ -63,9 +63,11 @@ object Main {
 
     val stream =
       if (complexity == 1) {
-        rawStream.assignTimestampsAndWatermarks(new PunctuatedAssigner[String](slideDurationMillis, numberOfPastWindows,
-          maximumWatermarks)).map((_, 1))
+
+        rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
+            new PunctuatedAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks)).map((_, 1))
       } else {
+
         rawStream.map(line => {
           val Array(p1, p2, p3) = line.split(" ")
           (p1, p2.toInt, p3.toLong)
@@ -176,21 +178,21 @@ object Main {
     val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
 
     // average
-    def simpleFunction = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)],
-                          collector: Collector[(String, Int)]) => {
-      val startTick = System.currentTimeMillis()
-      // iterator shall never be called more than once
-      val (str, sum, size) =
-        iterator.map(t => (t._1, t._2, 1)).reduce((t1, t2) => (t1._1, t1._2 + t2._2, t1._3 + t2._3))
+    def simpleFunction =
+      (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[(String, Int)], collector: Collector[(String, Int)]) => {
+        val startTick = System.currentTimeMillis()
+        // iterator shall never be called more than once
+        val (str, sum, size) =
+          iterator.map(t => (t._1, t._2, 1)).reduce((t1, t2) => (t1._1, t1._2 + t2._2, t1._3 + t2._3))
 
-      collector.collect((str, sum / size))
-      val endTick = System.currentTimeMillis()
+        collector.collect((str, sum / size))
+        val endTick = System.currentTimeMillis()
 
-      println("### ITERATOR: " + size + ", time: " + (endTick - startTick))
+        println("### ITERATOR: " + size + ", time: " + (endTick - startTick))
 
-      val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-      pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${size}")
-    }
+        val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+        pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${size}")
+      }
 
     // ngrams
     def fairlyComplexFunction =
@@ -199,15 +201,16 @@ object Main {
         val startTick = System.currentTimeMillis()
 
         // iterator shall never be called more than once
-        in.flatMap(p => (2 to ngrams).flatMap(p._1.split(' ').sliding(_).map(_.mkString))).groupBy(s => s)
-          .map(p => (p._1, p._2.size)).toList.sortBy(-_._2).take(10).foreach(out.collect)
+        val it = in.iterator.toIterable
+        it.flatMap(p => (2 to ngrams).flatMap(p._1.split(' ').sliding(_).map(_.mkString)))
+          .groupBy(_).map(p => (p._1, p._2.size)).toList.sortBy(-_._2).take(10).foreach(out.collect)
 
         val endTick = System.currentTimeMillis()
 
-        println("### ITERATOR: " + in.size + ", time: " + (endTick - startTick))
+        println("### ITERATOR: " + it.size + ", time: " + (endTick - startTick))
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${in.size}")
+        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
       }
 
     // fft
@@ -236,8 +239,9 @@ object Main {
       case 2 => complexFunction
     }
 
+    // non parallel stream - key is always the same
     // thumbling window
-    stream.keyBy(if (complexity == 1) 0 else 1).timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
+    stream.keyBy(1).timeWindow(Time.of(windowDurationSec, TimeUnit.SECONDS))
       .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(windowDurationSec) * numberOfPastWindows - 1,
         TimeUnit.NANOSECONDS))
       .trigger(trigger3).apply(function)
@@ -277,12 +281,7 @@ object Main {
     }
 
     override def extractTimestamp(element: T, previousElementTimestamp: Long): Long = {
-      // if(random == null) random = Random
-
       val windowIndex = sample()
-
-      // val sample = random.nextInt(100)
-      // val windowIndex = if(sample < 70) 0 else if(sample < 90) 1 else 2
 
       val ts = System.currentTimeMillis()
       if (windowMaxTS < 0) {
