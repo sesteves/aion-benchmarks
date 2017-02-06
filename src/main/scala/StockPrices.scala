@@ -16,10 +16,11 @@
  * limitations under the License.
  */
 
+import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.concurrent.TimeUnit
 
 import org.apache.commons.math3.distribution.LogNormalDistribution
-import org.apache.flink.api.common.ExecutionConfig
+import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
@@ -27,12 +28,12 @@ import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
 import org.apache.flink.streaming.api.functions.windowing.delta.DeltaFunction
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.streaming.api.scala.function.WindowFunction
 import org.apache.flink.streaming.api.watermark.Watermark
-import org.apache.flink.streaming.api.windowing.assigners.{GlobalWindows, SlidingEventTimeWindows, TumblingProcessingTimeWindows}
+import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows
 import org.apache.flink.streaming.api.windowing.evictors.TimeEvictor
 import org.apache.flink.streaming.api.windowing.time.Time
-import org.apache.flink.streaming.api.windowing.triggers.DeltaTrigger
+import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
+import org.apache.flink.streaming.api.windowing.triggers.{DeltaTrigger, Trigger, TriggerResult}
 import org.apache.flink.streaming.api.windowing.windows.{GlobalWindow, TimeWindow}
 import org.apache.flink.util.Collector
 
@@ -79,6 +80,8 @@ object StockPrices {
   private var port: Int = 0
   private var outputPath: String = null
 
+  val random = new Random(100)
+
   // scale and shape (or mean and stddev) are 0 and 1 respectively
   private val logNormalDist = new LogNormalDistribution()
 
@@ -87,18 +90,24 @@ object StockPrices {
   private var windowDurationMillis: Long = _
 
   def main(args: Array[String]) {
-
 //    if (!parseParameters(args)) {
 //      return
 //    }
 
-    val maxTuplesInMemory = 0
-    val tuplesAfterSpillFactor = 0
-    val windowDurationSec = 30
-    val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
-    val numberOfPastWindows = 2
+    if (args.length != 8) {
+      System.err.println("Usage: StockPrices <maxTuplesInMemory> <tuplesAfterSpillFactor> <tuplesToWatermarkThreshold> "
+        + "<complexity> <windowDurationSec> <slideDurationSec> <numberOfPastWindows> <maximumWatermarks>")
+      System.exit(1)
+    }
+    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec, slideDurationSec,
+    numberOfPastWindows, maximumWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
+      args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
+
+    // val windowDurationSec = 30
+    // val numberOfPastWindows = 2
 
     val windowDuration = Time.of(windowDurationSec, TimeUnit.SECONDS)
+    val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
     val lateness = Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS)
 
     this.windowDurationMillis = TimeUnit.SECONDS.toMillis(windowDurationSec)
@@ -124,20 +133,58 @@ object StockPrices {
     val DJI_Stream = env.addSource(generateStock("DJI")(30))
     val BUX_Stream = env.addSource(generateStock("BUX")(40))
 
-    //Union all stock streams together
-//    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
-    val stockStream = SPX_Stream.union(FTSE_Stream, DJI_Stream, BUX_Stream)
-
-    //Step 2
-    //Compute some simple statistics on a rolling window
-    val windowedAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
+    val stockAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
       override def extractTimestamp(t: StockPrice, l: Long) = t.ts
       override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
     }
 
-    val windowedStream = stockStream.assignTimestampsAndWatermarks(windowedAssigner).keyBy("symbol", "price")
+    //Union all stock streams together
+//    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
+    val stockStream = SPX_Stream.union(FTSE_Stream, DJI_Stream, BUX_Stream).assignTimestampsAndWatermarks(stockAssigner)
+
+    //Step 2
+    //Compute some simple statistics on a rolling window
+    val trigger = new Trigger[Any, TimeWindow] {
+      val fireFName = s"fire-${System.currentTimeMillis()}.txt"
+      val fireAndPurgeFName = s"fire-and-purge-${System.currentTimeMillis()}.txt"
+
+      val firedOnWatermarkDescriptor =
+        new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
+
+      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        triggerContext.registerEventTimeTimer(w.maxTimestamp())
+        TriggerResult.CONTINUE
+      }
+
+      override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
+      = ???
+
+      override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        // println(s"### onEventTime called (time: $time, window: $timeWindow)")
+
+        if (time == timeWindow.maxTimestamp) {
+          val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
+          if (firedOnWatermark.value()) {
+            TriggerResult.CONTINUE
+          } else {
+            firedOnWatermark.update(true)
+            val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
+            pw.println(System.currentTimeMillis())
+            TriggerResult.FIRE
+          }
+        } else {
+          val pw = new PrintWriter(new FileOutputStream(new File(fireAndPurgeFName), true), true)
+          pw.println(System.currentTimeMillis())
+          // println("FIRE AND PURGE!")
+          TriggerResult.FIRE_AND_PURGE
+        }
+      }
+    }
+
+    val windowedStream = stockStream.keyBy("symbol", "price")
       .timeWindow(Time.of(10, TimeUnit.SECONDS), Time.of(5, TimeUnit.SECONDS))
       .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(10) * numberOfPastWindows - 1 , TimeUnit.NANOSECONDS))
+      .trigger(trigger)
 
     val lowest = windowedStream.minBy("price")
     val maxByStock = windowedStream.maxBy("price")
@@ -146,22 +193,18 @@ object StockPrices {
     //Step 3
     //Use delta policy to create price change warnings,
     // and also count the number of warning every half minute
-    val warningAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
-      override def extractTimestamp(t: StockPrice, l: Long) = t.ts
-      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
-    }
     val warningPerStockAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
       override def extractTimestamp(t: (String, Long), l: Long) = t._2
       override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
     }
 
     // TODO: check whether eviction is needed:       .evictor()  https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
-    val priceWarnings = stockStream.assignTimestampsAndWatermarks(warningAssigner).keyBy("symbol")
-      .window(GlobalWindows.create()).evictor(TimeEvictor.of(Time.of(windowDurationSec, TimeUnit.SECONDS)))
-      .allowedLateness(Time.of(windowDurationNanos * numberOfPastWindows - 1, TimeUnit.NANOSECONDS))
+    val priceWarnings = stockStream.keyBy("symbol")
+      .window(GlobalWindows.create()).evictor(TimeEvictor.of(windowDuration)).allowedLateness(lateness)
       .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
       .apply(sendWarning)
 
+    // TODO check if assigned timestamps are passed across
     val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
       .map(t => Count(t._1, 1)).keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness).sum("count")
 
@@ -174,19 +217,15 @@ object StockPrices {
 
     val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
 
-    val mentionedSymbols = tweetStream.flatMap(tweet => tweet.split(" ")).map(_.toUpperCase())
-      .filter(symbols.contains(_))
+    val mentionedSymbols = tweetStream.flatMap(_.split(' ')).map(_.toUpperCase).filter(symbols.contains(_))
 
-    // TODO  does the stream loses timestamp reference when applying map transformations?
     val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(windowDuration)
-      .allowedLateness(lateness).sum("count")
+      .allowedLateness(lateness).trigger(trigger).sum("count")
 
     //Step 5
-    //For advanced analysis we join the number of tweets and
-    //the number of price change warnings by stock
+    //For advanced analysis we join the number of tweets and the number of price change warnings by stock
     //for the last half minute, we keep only the counts.
-    //This information is used to compute rolling correlations
-    //between the tweets and the price changes
+    //This information is used to compute rolling correlations between the tweets and the price changes
     val tweetsAndWarning = warningsPerStock.union(tweetsPerStock).keyBy("symbol")
       .timeWindow(windowDuration).allowedLateness(lateness)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
@@ -198,8 +237,8 @@ object StockPrices {
 //          TimeUnit.SECONDS)))
 //      .apply((c1, c2) => (c1.count, c2.count))
 
-    // TODO assign timestamps
-    val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness)
+    // TODO assign timestamps if needed
+    val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness).trigger(trigger)
       .apply(computeCorrelation)
 
     rollingCorrelation.print
@@ -219,19 +258,18 @@ object StockPrices {
 
   }
 
-  def sendWarning = (key: Tuple, globalWindow: GlobalWindow, iterator: Iterable[StockPrice],
-                     out: Collector[(String, Long)]) => {
-    if (iterator.nonEmpty) {
-      val head = iterator.head
+  def sendWarning = (key: Tuple, gw: GlobalWindow, in: Iterable[StockPrice], out: Collector[(String, Long)]) => {
+    if (in.nonEmpty) {
+      val head = in.head
       out.collect((head.symbol, head.ts))
     }
   }
 
-  def computeCorrelation = (timeWindow: TimeWindow, input: Iterable[(Int, Int)], out: Collector[Double]) => {
-    if (input.nonEmpty) {
-      val var1 = input.map(_._1)
+  def computeCorrelation = (timeWindow: TimeWindow, in: Iterable[(Int, Int)], out: Collector[Double]) => {
+    if (in.nonEmpty) {
+      val var1 = in.map(_._1)
       val mean1 = average(var1)
-      val var2 = input.map(_._2)
+      val var2 = in.map(_._2)
       val mean2 = average(var2)
 
       val cov = average(var1.zip(var2).map(xy => (xy._1 - mean1) * (xy._2 - mean2)))
@@ -251,8 +289,8 @@ object StockPrices {
     var price = 1000.0
     (context: SourceContext[StockPrice]) =>
       while(true) {
-        price = price + Random.nextGaussian * sigma
-        Thread.sleep(Random.nextInt(200))
+        price = price + random.nextGaussian * sigma
+        Thread.sleep(100)
 
         val windowIndex = sample()
         val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
@@ -267,8 +305,8 @@ object StockPrices {
   def generateTweets = {
     (context: SourceContext[(String, Long)]) =>
       while(true) {
-        val s = for (i <- 1 to 3) yield (symbols(Random.nextInt(symbols.size)))
-        Thread.sleep(Random.nextInt(500))
+        val s = for (i <- 1 to 3) yield (symbols(random.nextInt(symbols.size)))
+        Thread.sleep(200)
 
         val windowIndex = sample()
         val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
