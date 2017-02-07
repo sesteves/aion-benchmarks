@@ -284,6 +284,9 @@ object Main {
       ts - windowIndex * slideDurationMillis
     }
     override def getCurrentWatermark: Watermark = {
+      watermarkCount += 1
+      if(watermarkCount == maximumWatermarks) System.exit(0)
+
       val ts = System.currentTimeMillis()
       println(s"### Emitting watermark at ts: $ts")
       new Watermark(ts)
