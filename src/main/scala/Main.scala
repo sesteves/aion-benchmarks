@@ -8,7 +8,7 @@ import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
+import org.apache.flink.streaming.api.functions.{AssignerWithPeriodicWatermarks, AssignerWithPunctuatedWatermarks}
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.streaming.api.windowing.time.Time
@@ -37,6 +37,7 @@ object Main {
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+    env.getConfig.setAutoWatermarkInterval(slideDurationSec * 1000)
     env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
@@ -62,14 +63,14 @@ object Main {
       if (complexity == 1) {
 
         rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
-            new PunctuatedAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks)).map((_, 1))
+            new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks)).map((_, 1))
       } else {
 
         rawStream.map(line => {
           val Array(p1, p2, p3) = line.split(" ")
           (p1, p2.toInt, p3.toLong)
         })
-          .assignTimestampsAndWatermarks(new PunctuatedAssigner[(String, Int, Long)](slideDurationMillis,
+          .assignTimestampsAndWatermarks(new PeriodicAssigner[(String, Int, Long)](slideDurationMillis,
             numberOfPastWindows, maximumWatermarks))
           .map(tuple => (tuple._1, tuple._2))
       }
@@ -258,6 +259,36 @@ object Main {
     //    pw.close()
   }
 
+
+
+  class PeriodicAssigner[T](slideDurationMillis: Long, numberOfPastWindows: Int, maximumWatermarks: Int)
+    extends AssignerWithPeriodicWatermarks[T] {
+    var watermarkCount = 0
+
+    // scale and shape (or mean and stddev) are 0 and 1 respectively
+    val logNormalDist = new LogNormalDistribution()
+    logNormalDist.reseedRandomGenerator(100)
+
+    var windowMaxTS = -1l
+
+    def sample(): Int = {
+      val i = math.round(logNormalDist.sample()).toInt - 1
+      if (i <= numberOfPastWindows) {
+        if (i < 0) 0 else i
+      } else sample()
+    }
+
+    override def extractTimestamp(element: T, previousElementTimestamp: Long): Long = {
+      val windowIndex = sample()
+      val ts = System.currentTimeMillis()
+      ts - windowIndex * slideDurationMillis
+    }
+    override def getCurrentWatermark: Watermark = {
+      val ts = System.currentTimeMillis()
+      println(s"### Emitting watermark at ts: $ts")
+      new Watermark(ts)
+    }
+  }
 
   class PunctuatedAssigner[T](slideDurationMillis: Long, numberOfPastWindows: Int, maximumWatermarks: Int)
     extends AssignerWithPunctuatedWatermarks[T] {
