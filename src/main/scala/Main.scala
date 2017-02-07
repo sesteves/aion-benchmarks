@@ -17,6 +17,8 @@ import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.util.Collector
 
+import scala.util.Random
+
 
 object Main {
 
@@ -37,7 +39,7 @@ object Main {
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
-    env.getConfig.setAutoWatermarkInterval(slideDurationSec * 1000)
+    env.getConfig.setAutoWatermarkInterval(slideDurationMillis)
     env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
@@ -63,7 +65,8 @@ object Main {
       if (complexity == 1) {
 
         rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
-            new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks)).map((_, 1))
+            new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks))
+          .map(s => (s + " X" * 1000, 1))
       } else {
 
         rawStream.map(line => {
@@ -200,8 +203,9 @@ object Main {
 
         // iterator shall never be called more than once
         val it = in.iterator.toIterable
-        it.flatMap(p => (2 to ngrams).flatMap(p._1.split(' ').sliding(_).map(_.mkString)))
-          .groupBy(s => s).map(p => (p._1, p._2.size)).toList.sortBy(-_._2).take(10).foreach(out.collect)
+        it.map(p => p._1.substring(0, p._1.lastIndexOf(' ') - 1)).flatMap(s => (2 to ngrams).flatMap(s.split(' ')
+          .sliding(_).map(_.mkString))).groupBy(s => s).map(p => (p._1, p._2.size)).toList.sortBy(-_._2).take(10)
+          .foreach(out.collect)
 
         val endTick = System.currentTimeMillis()
 
