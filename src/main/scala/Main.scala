@@ -277,7 +277,7 @@ object Main {
 
     def sample(): Int = {
       val i = math.round(logNormalDist.sample()).toInt - 1
-      if (i <= numberOfPastWindows) {
+      if (i <= Math.min(numberOfPastWindows, watermarkCount)) {
         if (i < 0) 0 else i
       } else sample()
     }
