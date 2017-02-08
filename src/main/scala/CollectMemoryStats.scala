@@ -27,7 +27,7 @@ object CollectMemoryStats {
       while (vmDesc.isEmpty) {
         val vmsDesc = VirtualMachine.list()
         vmDesc = vmsDesc.find(desc => {
-          println(s"name: ${desc.displayName()}, id: ${desc.id()}")
+          // println(s"name: ${desc.displayName()}, id: ${desc.id()}")
           desc.displayName().startsWith(processName)
         })
         Thread.sleep(1000)
@@ -37,7 +37,7 @@ object CollectMemoryStats {
       val pw = new PrintWriter(new File(fname))
 
       try {
-        pw.println("timestamp, used, committed, max, swap")
+        pw.println("memts,used,comitted,max,readrate,writerate,swap,gcscatime,gcscacount,gcmstime,gcmscount,uptime")
 
         val vm = VirtualMachine.attach(vmDesc.get.id)
 
@@ -48,7 +48,7 @@ object CollectMemoryStats {
             val agent = vm.getSystemProperties().getProperty("java.home") + File.separator + "lib" + File.separator +
               "management-agent.jar"
             vm.loadAgent(agent)
-            println(vm.getAgentProperties)
+            // println(vm.getAgentProperties)
           }
           vm.getAgentProperties.getProperty(PropertyConnectorAddress)
         }

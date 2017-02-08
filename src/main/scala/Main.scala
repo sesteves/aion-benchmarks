@@ -66,7 +66,7 @@ object Main {
 
         rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
             new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks))
-          .map(s => (s + " X" * 1000, 1))
+          .map(s => (s + " " + "X" * 1, 1))
       } else {
 
         rawStream.map(line => {
@@ -189,7 +189,7 @@ object Main {
         collector.collect((str, sum / size))
         val endTick = System.currentTimeMillis()
 
-        println("### ITERATOR: " + size + ", time: " + (endTick - startTick))
+        println("### I T E R A T O R: " + size + ", time: " + (endTick - startTick))
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${size}")
@@ -204,12 +204,13 @@ object Main {
         // iterator shall never be called more than once
         val it = in.iterator.toIterable
         it.map(p => p._1.substring(0, p._1.lastIndexOf(' ') - 1)).flatMap(s => (2 to ngrams).flatMap(s.split(' ')
-          .sliding(_).map(_.mkString))).groupBy(s => s).map(p => (p._1, p._2.size)).toList.sortBy(-_._2).take(10)
-          .foreach(out.collect)
+          .sliding(_).map(_.mkString))).groupBy(s => s).map(p => (p._1, p._2.size))
+
+        // .toList.sortBy(-_._2).take(10).foreach(out.collect)
 
         val endTick = System.currentTimeMillis()
 
-        println("### ITERATOR: " + it.size + ", time: " + (endTick - startTick))
+        println("### I T E R A T O R: " + it.size + ", time: " + (endTick - startTick))
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
@@ -228,7 +229,7 @@ object Main {
         FFT.fft(paddedList).foreach(c => collector.collect((str, c.re.toInt)))
         val endTick = System.currentTimeMillis()
 
-        println("### ITERATOR: " + list.size + ", time: " + (endTick - startTick))
+        println("### I T E R A T O R: " + list.size + ", time: " + (endTick - startTick))
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${timeWindow.maxTimestamp()},$startTick,$endTick,${list.size}")
@@ -292,7 +293,7 @@ object Main {
       if(watermarkCount == maximumWatermarks) System.exit(0)
 
       val ts = System.currentTimeMillis()
-      println(s"### Emitting watermark at ts: $ts")
+      println(s"### E M I T T I N G   W A T E R M A R K (#$watermarkCount) at ts: $ts")
       new Watermark(ts)
     }
   }
@@ -310,7 +311,7 @@ object Main {
 
     def sample(): Int = {
       val i = math.round(logNormalDist.sample()).toInt - 1
-      if (i <= numberOfPastWindows) {
+      if (i <= Math.min(numberOfPastWindows, watermarkCount)) {
         if (i < 0) 0 else i
       } else sample()
     }
