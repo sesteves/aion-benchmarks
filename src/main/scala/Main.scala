@@ -23,6 +23,7 @@ import scala.util.Random
 object Main {
 
   val ngrams = 2
+  val additionalTupleSize = 3500
 
   def main(args: Array[String]): Unit = {
 
@@ -66,7 +67,7 @@ object Main {
 
         rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
             new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks))
-          .map(s => (s + " " + "X" * 1, 1))
+          .map(s => (s + " " + "X" * additionalTupleSize, 1))
       } else {
 
         rawStream.map(line => {
@@ -203,9 +204,9 @@ object Main {
 
         // iterator shall never be called more than once
         val it = in.iterator.toIterable
-        it.map(p => p._1.substring(0, p._1.lastIndexOf(' ') - 1)).flatMap(s => (2 to ngrams).flatMap(s.split(' ')
-          .sliding(_).map(_.mkString))).groupBy(s => s).map(p => (p._1, p._2.size))
-
+        it.map(p => p._1.substring(0, p._1.length - additionalTupleSize - 1))
+          .flatMap(s => (2 to ngrams).flatMap(s.split(' ').sliding(_).map(_.mkString)))
+          .groupBy(s => s).map(p => (p._1, p._2.size))
         // .toList.sortBy(-_._2).take(10).foreach(out.collect)
 
         val endTick = System.currentTimeMillis()
