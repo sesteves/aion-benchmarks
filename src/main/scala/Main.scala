@@ -290,8 +290,8 @@ object Main {
       ts - windowIndex * slideDurationMillis
     }
     override def getCurrentWatermark: Watermark = {
-      watermarkCount += 1
       if(watermarkCount == maximumWatermarks) System.exit(0)
+      watermarkCount += 1
 
       val ts = System.currentTimeMillis()
       println(s"### E M I T T I N G   W A T E R M A R K (#$watermarkCount) at ts: $ts")
@@ -330,8 +330,8 @@ object Main {
 
     override def checkAndGetNextWatermark(lastElement: T, extractedTimestamp: Long): Watermark = {
       if (extractedTimestamp > windowMaxTS) {
+        if (watermarkCount > maximumWatermarks) System.exit(0)
         watermarkCount += 1
-        if (watermarkCount == maximumWatermarks) System.exit(0)
 
         windowMaxTS = extractedTimestamp - (extractedTimestamp % slideDurationMillis) + slideDurationMillis
         println(s"### Emitting watermark at ts: $extractedTimestamp, windowsMaxTS: $windowMaxTS")
