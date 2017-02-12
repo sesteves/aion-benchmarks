@@ -275,8 +275,6 @@ object Main {
     val logNormalDist = new LogNormalDistribution()
     logNormalDist.reseedRandomGenerator(100)
 
-    var windowMaxTS = -1l
-
     def sample(): Int = {
       val i = math.round(logNormalDist.sample()).toInt - 1
       if (i <= Math.min(numberOfPastWindows, watermarkCount)) {

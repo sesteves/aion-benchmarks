@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
@@ -100,7 +99,7 @@ object StockPrices {
       System.exit(1)
     }
     val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec, slideDurationSec,
-    numberOfPastWindows, maximumWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
+    numberOfPastWindows, maxWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
       args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
 
     // val windowDurationSec = 30
@@ -134,8 +133,29 @@ object StockPrices {
     val BUX_Stream = env.addSource(generateStock("BUX")(40))
 
     val stockAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
-      override def extractTimestamp(t: StockPrice, l: Long) = t.ts
-      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+      var watermarkCount = 0
+
+      // scale and shape (or mean and stddev) are 0 and 1 respectively
+      val logNormalDist = new LogNormalDistribution()
+      logNormalDist.reseedRandomGenerator(100)
+
+      def sample(): Int = {
+        val i = math.round(logNormalDist.sample()).toInt - 1
+        if (i <= Math.min(numberOfPastWindows, watermarkCount)) {
+          if (i < 0) 0 else i
+        } else sample()
+      }
+
+      override def extractTimestamp(t: StockPrice, l: Long) = {
+        val windowIndex = sample()
+        t.ts - windowIndex * windowDurationMillis
+      }
+
+      override def getCurrentWatermark = {
+        if(watermarkCount == maxWatermarks) System.exit(0)
+        watermarkCount += 1
+        new Watermark(System.currentTimeMillis())
+      }
     }
 
     //Union all stock streams together
@@ -211,8 +231,26 @@ object StockPrices {
     //Step 4
     //Read a stream of tweets and extract the stock symbols
     val tweetAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
-      override def extractTimestamp(t: (String, Long), l: Long) = t._2
-      override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
+      var watermarkCount = 0
+
+      // scale and shape (or mean and stddev) are 0 and 1 respectively
+      val logNormalDist = new LogNormalDistribution()
+      logNormalDist.reseedRandomGenerator(100)
+
+      def sample(): Int = {
+        val i = math.round(logNormalDist.sample()).toInt - 1
+        if (i <= Math.min(numberOfPastWindows, watermarkCount)) { if (i < 0) 0 else i } else sample()
+      }
+
+      override def extractTimestamp(t: (String, Long), l: Long) = {
+        val windowIndex = sample()
+        t._2 - windowIndex * windowDurationMillis
+      }
+
+      override def getCurrentWatermark = {
+        watermarkCount += 1
+        new Watermark(System.currentTimeMillis())
+      }
     }
 
     val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
@@ -280,20 +318,14 @@ object StockPrices {
     }
   }
 
-  def sample(): Int = {
-    val i = math.round(logNormalDist.sample()).toInt - 1
-    if(i <= numberOfPastWindows) { if(i < 0) 0 else i } else sample()
-  }
-
   def generateStock(symbol: String)(sigma: Int) = {
     var price = 1000.0
     (context: SourceContext[StockPrice]) =>
       while(true) {
         price = price + random.nextGaussian * sigma
-        Thread.sleep(100)
+        Thread.sleep(10)
 
-        val windowIndex = sample()
-        val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
+        val ts = System.currentTimeMillis()
         context.collect(StockPrice(symbol, price, ts))
       }
   }
@@ -306,10 +338,9 @@ object StockPrices {
     (context: SourceContext[(String, Long)]) =>
       while(true) {
         val s = for (i <- 1 to 3) yield (symbols(random.nextInt(symbols.size)))
-        Thread.sleep(200)
+        Thread.sleep(20)
 
-        val windowIndex = sample()
-        val ts = System.currentTimeMillis() - windowIndex * windowDurationMillis
+        val ts = System.currentTimeMillis()
         context.collect((s.mkString(" "), ts))
       }
   }
