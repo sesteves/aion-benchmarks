@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.tuple.Tuple
+import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
@@ -114,7 +115,7 @@ object StockPrices {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
-    // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
 
     //Step 1
     //Read a stream of stock prices from different sources and union it into one stream
@@ -212,11 +213,47 @@ object StockPrices {
       override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
     }
 
-    // TODO: check whether eviction is needed: https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
-    val priceWarnings = stockStream.keyBy("symbol")
-      .window(GlobalWindows.create()).evictor(TimeEvictor.of(windowDuration)).allowedLateness(lateness)
-      .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
-      .apply(sendWarning)
+//   eviction: https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
+//    val priceWarnings = stockStream.keyBy("symbol")
+//      .window(GlobalWindows.create()).evictor(TimeEvictor.of(windowDuration)).allowedLateness(lateness)
+//      .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
+//      .apply(sendWarning)
+
+    val myDeltaTrigger = new Trigger[StockPrice, TimeWindow] {
+      val threshold = 0.05
+      val stateDesc = new ValueStateDescriptor[java.lang.Double]("last-element", classOf[java.lang.Double], null)
+
+      def delta(oldPrice: Double, newPrice: Double) = Math.abs(oldPrice / newPrice - 1) > threshold
+
+      override def onElement(element: StockPrice, ts: Long, w: TimeWindow, ctx: TriggerContext): TriggerResult = {
+        val lastElementState = ctx.getPartitionedState(stateDesc)
+
+        if (lastElementState.value() == null) {
+          lastElementState.update(element.price)
+          TriggerResult.CONTINUE
+        } else if (delta(lastElementState.value(), element.price)) {
+          lastElementState.update(element.price)
+          return TriggerResult.FIRE
+        } else {
+          TriggerResult.CONTINUE
+        }
+      }
+
+      override def onEventTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
+        return TriggerResult.CONTINUE
+      }
+
+      override def onProcessingTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
+        return TriggerResult.CONTINUE
+      }
+
+      override def clear(window: TimeWindow, ctx: TriggerContext) = {
+        ctx.getPartitionedState(stateDesc).clear()
+      }
+    }
+
+    val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
+      .trigger(myDeltaTrigger).apply(sendWarning)
 
     // TODO check if assigned timestamps are passed across
     val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
@@ -328,7 +365,7 @@ object StockPrices {
 
   }
 
-  def sendWarning = (key: Tuple, gw: GlobalWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
+  def sendWarning = (key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
     val it = in.iterator.toIterable
     out.collect((it.head.symbol, it.head.ts, it.head.dummy))
   }
