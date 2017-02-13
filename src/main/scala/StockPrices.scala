@@ -154,7 +154,9 @@ object StockPrices {
       override def getCurrentWatermark = {
         if(watermarkCount == maxWatermarks) System.exit(0)
         watermarkCount += 1
-        new Watermark(System.currentTimeMillis())
+        val ts = System.currentTimeMillis()
+        println(s"### E M I T T I N G   W A T E R M A R K (#$watermarkCount) at ts: $ts")
+        new Watermark(ts)
       }
     }
 
