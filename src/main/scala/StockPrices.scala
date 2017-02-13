@@ -67,12 +67,12 @@ import scala.util.Random
   */
 object StockPrices {
 
-  case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String)
-  case class Count(symbol: String, count: Int)
+  case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String = "X" * additionalTupleSize)
+  case class Count(symbol: String, count: Int, dummy: String = "X" * additionalTupleSize)
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
 
-  val defaultPrice = StockPrice("", 1000, -1, "")
+  val defaultPrice = StockPrice("", 1000, -1)
 
   private var fileOutput: Boolean = false
   private var hostName: String = null
@@ -207,12 +207,12 @@ object StockPrices {
     //Step 3
     //Use delta policy to create price change warnings,
     // and also count the number of warning every half minute
-    val warningPerStockAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
-      override def extractTimestamp(t: (String, Long), l: Long) = t._2
+    val warningPerStockAssigner = new AssignerWithPeriodicWatermarks[(String, Long, String)] {
+      override def extractTimestamp(t: (String, Long, String), l: Long) = t._2
       override def getCurrentWatermark = new Watermark(System.currentTimeMillis())
     }
 
-    // TODO: check whether eviction is needed:       .evictor()  https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
+    // TODO: check whether eviction is needed: https://github.com/apache/flink/blob/master/flink-examples/flink-examples-streaming/src/main/scala/org/apache/flink/streaming/scala/examples/windowing/TopSpeedWindowing.scala
     val priceWarnings = stockStream.keyBy("symbol")
       .window(GlobalWindows.create()).evictor(TimeEvictor.of(windowDuration)).allowedLateness(lateness)
       .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
@@ -315,6 +315,7 @@ object StockPrices {
     env.execute("Stock stream")
   }
 
+
   def priceChange = new DeltaFunction[StockPrice] {
     override def getDelta(oldSP: StockPrice, newSP: StockPrice) = Math.abs(oldSP.price / newSP.price - 1)
   }
@@ -323,15 +324,13 @@ object StockPrices {
 
     val (symbol, priceSum, elementSum) = in.map(stockPrice => (stockPrice.symbol, stockPrice.price, 1))
       .reduce((p1, p2) => (p1._1, p1._2 + p2._2, p1._3 + p2._3))
-    out.collect(StockPrice(symbol, priceSum / elementSum, tw.maxTimestamp(), "X" * additionalTupleSize))
+    out.collect(StockPrice(symbol, priceSum / elementSum, tw.maxTimestamp()))
 
   }
 
-  def sendWarning = (key: Tuple, gw: GlobalWindow, in: Iterable[StockPrice], out: Collector[(String, Long)]) => {
-    if (in.nonEmpty) {
-      val head = in.head
-      out.collect((head.symbol, head.ts))
-    }
+  def sendWarning = (key: Tuple, gw: GlobalWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
+    val it = in.iterator.toIterable
+    out.collect((it.head.symbol, it.head.ts, it.head.dummy))
   }
 
   val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
@@ -367,7 +366,7 @@ object StockPrices {
         Thread.sleep(10)
 
         val ts = System.currentTimeMillis()
-        context.collect(StockPrice(symbol, price, ts, "X" * additionalTupleSize))
+        context.collect(StockPrice(symbol, price, ts))
       }
   }
 
