@@ -333,19 +333,29 @@ object StockPrices {
     }
   }
 
-  def computeCorrelation = (timeWindow: TimeWindow, in: Iterable[(Int, Int)], out: Collector[Double]) => {
-    if (in.nonEmpty) {
-      val var1 = in.map(_._1)
-      val mean1 = average(var1)
-      val var2 = in.map(_._2)
-      val mean2 = average(var2)
+  val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
 
-      val cov = average(var1.zip(var2).map(xy => (xy._1 - mean1) * (xy._2 - mean2)))
-      val d1 = Math.sqrt(average(var1.map(x => Math.pow((x - mean1), 2))))
-      val d2 = Math.sqrt(average(var2.map(x => Math.pow((x - mean2), 2))))
+  def computeCorrelation = (tw: TimeWindow, in: Iterable[(Int, Int)], out: Collector[Double]) => {
+    val startTick = System.currentTimeMillis()
 
-      out.collect(cov / (d1 * d2))
-    }
+    val it = in.iterator.toIterable
+
+    val var1 = it.map(_._1)
+    val mean1 = average(var1)
+    val var2 = it.map(_._2)
+    val mean2 = average(var2)
+
+    val cov = average(var1.zip(var2).map(xy => (xy._1 - mean1) * (xy._2 - mean2)))
+    val d1 = Math.sqrt(average(var1.map(x => Math.pow((x - mean1), 2))))
+    val d2 = Math.sqrt(average(var2.map(x => Math.pow((x - mean2), 2))))
+
+    out.collect(cov / (d1 * d2))
+
+    val endTick = System.currentTimeMillis()
+    println("### I T E R A T O R: " + it.size + ", time: " + (endTick - startTick))
+
+    val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+    pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
   }
 
   def generateStock(symbol: String)(sigma: Int) = {
