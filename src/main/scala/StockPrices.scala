@@ -67,12 +67,12 @@ import scala.util.Random
   */
 object StockPrices {
 
-  case class StockPrice(symbol: String, price: Double, ts: Long)
+  case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String)
   case class Count(symbol: String, count: Int)
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
 
-  val defaultPrice = StockPrice("", 1000, -1)
+  val defaultPrice = StockPrice("", 1000, -1, "")
 
   private var fileOutput: Boolean = false
   private var hostName: String = null
@@ -81,12 +81,11 @@ object StockPrices {
 
   val random = new Random(100)
 
-  // scale and shape (or mean and stddev) are 0 and 1 respectively
-  private val logNormalDist = new LogNormalDistribution()
-
   private var numberOfPastWindows: Int = _
 
   private var windowDurationMillis: Long = _
+
+  val additionalTupleSize = 3500
 
   def main(args: Array[String]) {
 //    if (!parseParameters(args)) {
@@ -320,11 +319,11 @@ object StockPrices {
     override def getDelta(oldSP: StockPrice, newSP: StockPrice) = Math.abs(oldSP.price / newSP.price - 1)
   }
 
-  def mean = (key: Tuple, timeWindow: TimeWindow, iterator: Iterable[StockPrice], out: Collector[StockPrice]) => {
+  def mean = (key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[StockPrice]) => {
 
-    val (symbol, priceSum, elementSum) = iterator.map(stockPrice => (stockPrice.symbol, stockPrice.price, 1))
+    val (symbol, priceSum, elementSum) = in.map(stockPrice => (stockPrice.symbol, stockPrice.price, 1))
       .reduce((p1, p2) => (p1._1, p1._2 + p2._2, p1._3 + p2._3))
-    out.collect(StockPrice(symbol, priceSum / elementSum, timeWindow.maxTimestamp()))
+    out.collect(StockPrice(symbol, priceSum / elementSum, tw.maxTimestamp(), "X" * additionalTupleSize))
 
   }
 
@@ -368,7 +367,7 @@ object StockPrices {
         Thread.sleep(10)
 
         val ts = System.currentTimeMillis()
-        context.collect(StockPrice(symbol, price, ts))
+        context.collect(StockPrice(symbol, price, ts, "X" * additionalTupleSize))
       }
   }
 
