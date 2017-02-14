@@ -69,7 +69,9 @@ import scala.util.Random
 object StockPrices {
 
   case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String = "X" * additionalTupleSize)
-  case class Count(symbol: String, count: Int, dummy: String = "X" * additionalTupleSize)
+  case class Count(symbol: String, count: Int, dummy: String = "X" * additionalTupleSize) {
+    def this() = this("", -1)
+  }
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
 
@@ -86,7 +88,7 @@ object StockPrices {
 
   private var windowDurationMillis: Long = _
 
-  val additionalTupleSize = 3500
+  val additionalTupleSize = 1
 
   def main(args: Array[String]) {
 //    if (!parseParameters(args)) {
@@ -196,6 +198,7 @@ object StockPrices {
       }
     }
 
+    /*
     val windowedStream = stockStream.keyBy("symbol", "price")
       .timeWindow(Time.of(10, TimeUnit.SECONDS), Time.of(5, TimeUnit.SECONDS))
       .allowedLateness(Time.of(TimeUnit.SECONDS.toNanos(10) * numberOfPastWindows - 1 , TimeUnit.NANOSECONDS))
@@ -204,6 +207,7 @@ object StockPrices {
     val lowest = windowedStream.minBy("price")
     val maxByStock = windowedStream.maxBy("price")
     val rollingMean = windowedStream.apply(mean)
+    */
 
     //Step 3
     //Use delta policy to create price change warnings,
@@ -295,11 +299,13 @@ object StockPrices {
     //For advanced analysis we join the number of tweets and the number of price change warnings by stock
     //for the last half minute, we keep only the counts.
     //This information is used to compute rolling correlations between the tweets and the price changes
+
     val tweetsAndWarning = warningsPerStock.union(tweetsPerStock).keyBy("symbol")
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
         in.groupBy(_.symbol).foreach({case (_, it) => out.collect((it.head.count, it.last.count)) })
     })
+
 
 //    val tweetsAndWarning = warningsPerStock.join(tweetsPerStock).where(_.symbol).equalTo(_.symbol)
 //      .window(SlidingEventTimeWindows.of(Time.of(windowDurationSec, TimeUnit.SECONDS), Time.of(windowDurationSec,
@@ -343,11 +349,13 @@ object StockPrices {
       }
     }
 
+/*
     // TODO assign timestamps if needed
     val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness).trigger(trigger2)
       .apply(computeCorrelation)
 
     rollingCorrelation.print
+*/
 
     env.execute("Stock stream")
   }
@@ -366,6 +374,7 @@ object StockPrices {
   }
 
   def sendWarning = (key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
+
     val it = in.iterator.toIterable
     out.collect((it.head.symbol, it.head.ts, it.head.dummy))
   }
@@ -400,7 +409,7 @@ object StockPrices {
     (context: SourceContext[StockPrice]) =>
       while(true) {
         price = price + random.nextGaussian * sigma
-        Thread.sleep(10)
+        Thread.sleep(100)
 
         val ts = System.currentTimeMillis()
         context.collect(StockPrice(symbol, price, ts))
@@ -415,7 +424,7 @@ object StockPrices {
     (context: SourceContext[(String, Long)]) =>
       while(true) {
         val s = for (i <- 1 to 3) yield (symbols(random.nextInt(symbols.size)))
-        Thread.sleep(20)
+        Thread.sleep(200)
 
         val ts = System.currentTimeMillis()
         context.collect((s.mkString(" "), ts))
