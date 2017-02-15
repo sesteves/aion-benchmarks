@@ -69,8 +69,15 @@ import scala.util.Random
 object StockPrices {
 
   case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String = "X" * additionalTupleSize)
-  case class Count(symbol: String, count: Int, dummy: String = "X" * additionalTupleSize) {
+  case class Count(var symbol: String, var count: Int, var dummy: String = "X" * additionalTupleSize) {
     def this() = this("", -1)
+    def setSymbol(symbol: String): Unit = this.symbol = symbol
+    def setCount(count: Int): Unit = this.count = count
+    def setDummy(symbol: String): Unit = this.dummy = dummy
+    def getSymbol = symbol
+    def getCount = count
+    def getDummy = dummy
+
   }
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
@@ -104,8 +111,6 @@ object StockPrices {
     numberOfPastWindows, maxWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
       args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
 
-    // val windowDurationSec = 30
-    // val numberOfPastWindows = 2
 
     val windowDuration = Time.of(windowDurationSec, TimeUnit.SECONDS)
     val windowDurationNanos = TimeUnit.SECONDS.toNanos(windowDurationSec)
@@ -349,13 +354,11 @@ object StockPrices {
       }
     }
 
-/*
     // TODO assign timestamps if needed
     val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness).trigger(trigger2)
       .apply(computeCorrelation)
 
     rollingCorrelation.print
-*/
 
     env.execute("Stock stream")
   }
