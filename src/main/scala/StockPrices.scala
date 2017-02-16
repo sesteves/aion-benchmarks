@@ -77,7 +77,6 @@ object StockPrices {
     def getSymbol = symbol
     def getCount = count
     def getDummy = dummy
-
   }
 
   val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
