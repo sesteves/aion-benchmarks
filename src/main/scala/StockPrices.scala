@@ -68,12 +68,23 @@ import scala.util.Random
   */
 object StockPrices {
 
-  case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String = "X" * additionalTupleSize)
+  case class StockPrice(var symbol: String, var price: Double, var ts: Long,
+                        var dummy: String = "X" * additionalTupleSize) {
+    def this() = this(null, -1, -1)
+    def setSymbol(symbol: String) = this.symbol = symbol
+    def setPrice(price: Int) = this.price = price
+    def setTs(ts: Long) = this.ts = ts
+    def setDummy(dummy: String) = this.dummy = dummy
+    def getSymbol = symbol
+    def getPrice = price
+    def getTs = ts
+    def getDummy = dummy
+  }
   case class Count(var symbol: String, var count: Int, var dummy: String = "X" * additionalTupleSize) {
-    def this() = this("", -1)
-    def setSymbol(symbol: String): Unit = this.symbol = symbol
-    def setCount(count: Int): Unit = this.count = count
-    def setDummy(symbol: String): Unit = this.dummy = dummy
+    def this() = this(null, -1)
+    def setSymbol(symbol: String) = this.symbol = symbol
+    def setCount(count: Int) = this.count = count
+    def setDummy(dummy: String) = this.dummy = dummy
     def getSymbol = symbol
     def getCount = count
     def getDummy = dummy
