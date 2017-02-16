@@ -318,7 +318,9 @@ object StockPrices {
     val tweetsAndWarning = warningsPerStock.union(tweetsPerStock).keyBy("symbol")
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
-        in.groupBy(_.symbol).foreach({case (_, it) => out.collect((it.head.count, it.last.count)) })
+        in.groupBy(_.symbol).foreach({case (_, it) =>
+          val v = (it.head.count, it.last.count)
+          out.collect(v) })
     })
 
 
