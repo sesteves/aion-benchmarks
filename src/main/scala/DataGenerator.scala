@@ -1,9 +1,6 @@
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.net.{ServerSocket, SocketException}
 
-import StockPrices.StockPrice
-import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
-
 import scala.io.Source
 import scala.util.Random
 
@@ -68,7 +65,7 @@ object DataGenerator {
               val price = 1000.0 + random.nextGaussian * 10
               val ts = System.currentTimeMillis()
               out.write(s"$symbol $price $ts\n")
-            case 3 => {
+            case 3 =>
               val s = 1.to(10).map(symbols(random.nextInt(symbols.size))).mkString(" ")
               val ts = System.currentTimeMillis()
               out.write(s"$s $ts\n")

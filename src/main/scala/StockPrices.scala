@@ -137,12 +137,6 @@ object StockPrices {
 //    val DJI_Stream = env.addSource(generateStock("DJI")(30))
 //    val BUX_Stream = env.addSource(generateStock("BUX")(40))
 
-    // read from a socket stream stock prices
-    val stockStream = env.socketTextStream(HostName, StocksPort).map(s => {
-      val elements = s.split(" ")
-      StockPrice(elements(0), elements(1).toDouble, elements(2).toLong)
-    })
-
     val stockAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
       var watermarkCount = 0
 
@@ -170,6 +164,12 @@ object StockPrices {
         new Watermark(ts)
       }
     }
+
+    // read from a socket stream stock prices
+    val stockStream = env.socketTextStream(HostName, StocksPort).map(s => {
+      val elements = s.split(" ")
+      StockPrice(elements(0), elements(1).toDouble, elements(2).toLong)
+    }).assignTimestampsAndWatermarks(stockAssigner)
 
     //Union all stock streams together
 //    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
