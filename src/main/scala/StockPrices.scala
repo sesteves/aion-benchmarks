@@ -25,19 +25,14 @@ import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
-import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
 import org.apache.flink.streaming.api.functions.windowing.delta.DeltaFunction
 import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.api.watermark.Watermark
-import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows
-import org.apache.flink.streaming.api.windowing.evictors.TimeEvictor
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
-import org.apache.flink.streaming.api.windowing.triggers.{DeltaTrigger, Trigger, TriggerResult}
-import org.apache.flink.streaming.api.windowing.windows.{GlobalWindow, TimeWindow}
+import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.util.Collector
-
-import scala.util.Random
 
 /**
   * This example showcases a moderately complex Flink Streaming pipeline.
@@ -68,6 +63,11 @@ import scala.util.Random
   */
 object StockPrices {
 
+  val HostName = "ginja-a5"
+  val StocksPort = 9992
+  val TweetsPort = 9993
+
+
   case class StockPrice(symbol: String, price: Double, ts: Long, dummy: String = "X" * additionalTupleSize)
   case class Count(var symbol: String, var count: Int, var dummy: String = "X" * additionalTupleSize) {
     def this() = this(null, -1)
@@ -79,16 +79,15 @@ object StockPrices {
     def getDummy = dummy
   }
 
-  val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
+  // val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
+  val symbols = 1.to(1000).map(i => s"SYM$i")
 
   val defaultPrice = StockPrice("", 1000, -1)
 
   private var fileOutput: Boolean = false
-  private var hostName: String = null
-  private var port: Int = 0
   private var outputPath: String = null
 
-  val random = new Random(100)
+  // val random = new Random(100)
 
   private var numberOfPastWindows: Int = _
 
@@ -133,10 +132,16 @@ object StockPrices {
 //    })
 
     //Generate other stock streams
-    val SPX_Stream = env.addSource(generateStock("SPX")(10))
-    val FTSE_Stream = env.addSource(generateStock("FTSE")(20))
-    val DJI_Stream = env.addSource(generateStock("DJI")(30))
-    val BUX_Stream = env.addSource(generateStock("BUX")(40))
+//    val SPX_Stream = env.addSource(generateStock("SPX")(10))
+//    val FTSE_Stream = env.addSource(generateStock("FTSE")(20))
+//    val DJI_Stream = env.addSource(generateStock("DJI")(30))
+//    val BUX_Stream = env.addSource(generateStock("BUX")(40))
+
+    // read from a socket stream stock prices
+    val stockStream = env.socketTextStream(HostName, StocksPort).map(s => {
+      val elements = s.split(" ")
+      StockPrice(elements(0), elements(1).toDouble, elements(2).toLong)
+    })
 
     val stockAssigner = new AssignerWithPeriodicWatermarks[StockPrice] {
       var watermarkCount = 0
@@ -168,7 +173,7 @@ object StockPrices {
 
     //Union all stock streams together
 //    val stockStream = socketStockStream.union(SPX_Stream, FTSE_Stream, DJI_Stream, BUX_Stream)
-    val stockStream = SPX_Stream.union(FTSE_Stream, DJI_Stream, BUX_Stream).assignTimestampsAndWatermarks(stockAssigner)
+    // val stockStream = SPX_Stream.union(FTSE_Stream, DJI_Stream, BUX_Stream).assignTimestampsAndWatermarks(stockAssigner)
 
     //Step 2
     //Compute some simple statistics on a rolling window
@@ -292,7 +297,13 @@ object StockPrices {
       }
     }
 
-    val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
+    // read from a socket stream stock prices
+    val tweetStream = env.socketTextStream(HostName, TweetsPort).map(str => {
+      val t = str.splitAt(str.lastIndexOf(" ") + 1)
+      (t._1 , t._2.toLong)
+    }).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
+
+    //val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
 
     val mentionedSymbols = tweetStream.flatMap(_.split(' ')).map(_.toUpperCase).filter(symbols.contains(_))
 
@@ -408,47 +419,31 @@ object StockPrices {
     pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
   }
 
-  def generateStock(symbol: String)(sigma: Int) = {
-    var price = 1000.0
-    (context: SourceContext[StockPrice]) =>
-      while(true) {
-        price = price + random.nextGaussian * sigma
-        Thread.sleep(100)
-
-        val ts = System.currentTimeMillis()
-        context.collect(StockPrice(symbol, price, ts))
-      }
-  }
+//  def generateStock(symbol: String)(sigma: Int) = {
+//    var price = 1000.0
+//    (context: SourceContext[StockPrice]) =>
+//      while(true) {
+//        price = price + random.nextGaussian * sigma
+//        Thread.sleep(100)
+//
+//        val ts = System.currentTimeMillis()
+//        context.collect(StockPrice(symbol, price, ts))
+//      }
+//  }
 
   def average[T](ts: Iterable[T])(implicit num: Numeric[T]) = {
     num.toDouble(ts.sum) / ts.size
   }
 
-  def generateTweets = {
-    (context: SourceContext[(String, Long)]) =>
-      while(true) {
-        val s = for (i <- 1 to 3) yield (symbols(random.nextInt(symbols.size)))
-        Thread.sleep(200)
-
-        val ts = System.currentTimeMillis()
-        context.collect((s.mkString(" "), ts))
-      }
-  }
-
-  private def parseParameters(args: Array[String]): Boolean = {
-    if (args.length == 3) {
-      fileOutput = true
-      hostName = args(0)
-      port = args(1).toInt
-      outputPath = args(2)
-    } else if (args.length == 2) {
-      hostName = args(0)
-      port = args(1).toInt
-    } else {
-      System.err.println("Usage: StockPrices <hostname> <port> [<output path>]")
-      return false
-    }
-    true
-  }
+//  def generateTweets = {
+//    (context: SourceContext[(String, Long)]) =>
+//      while(true) {
+//        val s = for (i <- 1 to 3) yield (symbols(random.nextInt(symbols.size)))
+//        Thread.sleep(200)
+//
+//        val ts = System.currentTimeMillis()
+//        context.collect((s.mkString(" "), ts))
+//      }
+//  }
 
 }
