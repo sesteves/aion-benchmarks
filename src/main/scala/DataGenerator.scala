@@ -62,11 +62,11 @@ object DataGenerator {
               if (lineIndex == lines.get.size) lineIndex = 0
             case 2 =>
               val symbol = symbols(random.nextInt(symbols.size))
-              val price = 1000.0 + random.nextGaussian * 10
+              val price = 1000.0 + random.nextGaussian * 50
               val ts = System.currentTimeMillis()
               out.write(s"$symbol $price $ts\n")
             case 3 =>
-              val s = 1.to(10).map(symbols(random.nextInt(symbols.size))).mkString(" ")
+              val s = 1.to(10).map(_ => symbols(random.nextInt(symbols.size))).mkString(" ")
               val ts = System.currentTimeMillis()
               out.write(s"$s $ts\n")
           }

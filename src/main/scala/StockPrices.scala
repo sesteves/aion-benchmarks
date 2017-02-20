@@ -63,7 +63,7 @@ import org.apache.flink.util.Collector
   */
 object StockPrices {
 
-  val HostName = "ginja-a5"
+  val HostName = "localhost"
   val StocksPort = 9992
   val TweetsPort = 9993
 
@@ -80,7 +80,7 @@ object StockPrices {
   }
 
   // val symbols = List("SPX", "FTSE", "DJI", "DJT", "BUX", "DAX", "GOOG")
-  val symbols = 1.to(1000).map(i => s"SYM$i")
+  // val symbols = 1.to(1000).map(i => s"SYM$i")
 
   val defaultPrice = StockPrice("", 1000, -1)
 
@@ -272,6 +272,8 @@ object StockPrices {
     val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
       .map(t => Count(t._1, 1)).keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness).sum("count")
 
+    warningsPerStock.print()
+
     //Step 4
     //Read a stream of tweets and extract the stock symbols
     val tweetAssigner = new AssignerWithPeriodicWatermarks[(String, Long)] {
@@ -305,7 +307,7 @@ object StockPrices {
 
     //val tweetStream = env.addSource(generateTweets).assignTimestampsAndWatermarks(tweetAssigner).map(_._1)
 
-    val mentionedSymbols = tweetStream.flatMap(_.split(' ')).map(_.toUpperCase).filter(symbols.contains(_))
+    val mentionedSymbols = tweetStream.flatMap(_.split(' ')).map(_.toUpperCase) // .filter(symbols.contains(_))
 
     val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(windowDuration)
       .allowedLateness(lateness).trigger(trigger).sum("count")
