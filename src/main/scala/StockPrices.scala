@@ -232,10 +232,9 @@ object StockPrices {
 //      .trigger(DeltaTrigger.of(0.05, priceChange, stockStream.dataType.createSerializer(env.getConfig)))
 //      .apply(sendWarning)
 
-    def delta(oldPrice: Double, newPrice: Double) = Math.abs(oldPrice / newPrice - 1) > threshold
+    def delta(oldPrice: Double, newPrice: Double) = Math.abs(oldPrice / newPrice - 1) > 0.05
 
     val myDeltaTrigger = new Trigger[StockPrice, TimeWindow] {
-      val threshold = 0.05
       val stateDesc = new ValueStateDescriptor[java.lang.Double]("last-element", classOf[java.lang.Double], null)
 
       override def onElement(element: StockPrice, ts: Long, w: TimeWindow, ctx: TriggerContext): TriggerResult = {
@@ -268,16 +267,11 @@ object StockPrices {
 //    val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
 //      .trigger(myDeltaTrigger).apply(sendWarning)
 
-
     val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
       .trigger(trigger)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
-
-
-        in.sliding(2).filter(it => delta(it.head, it.last))
-        in.reduce((sp1, sp2) => (sp1.))
-
-
+        in.sliding(2).filter(it => delta(it.head.price, it.last.price))
+          .map(it => out.collect(it.head.symbol, it.head.ts, it.head.dummy))
       }
     )
 
