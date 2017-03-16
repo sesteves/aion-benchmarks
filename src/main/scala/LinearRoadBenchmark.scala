@@ -40,8 +40,9 @@ object LinearRoadBenchmark {
     val vehicleReports = rawStream.filter(_.startsWith("0")).map(VehicleReport(_))
 
 
+    // Note that some vehicles might emit two position reports during this minute
     val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSeg, vr.speed, 1)).keyBy(0)
-      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3))
+      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3))
 
     // accident on a given segment whenever two or more vehicles are stopped
     // in that segment at the same lane and position.
@@ -50,16 +51,30 @@ object LinearRoadBenchmark {
     val stoppedVehicles = vehicleReports.keyBy("carId", "location")
       .fold((null: VehicleReport , 0))((acc, vr) => (vr, acc._2 + 1)).filter(_._2 >= 4).map(_._1)
 
-/*
-    val accidents = stoppedVehicles.keyBy("location")
-      .filterWithState((vr, seenCarId: Option[Int]) => {
-        seenCarId match {
-          case None => (false, Some(vr.carId))
-          case Some(cardId) =>
-        }
-      })
-*/
+    val accidents = stoppedVehicles.map((_, 1)).keyBy("location").sum(1).filter(_._2 >= 2)
+      .map(p => (p._1.absoluteSeg, 0))
 
+
+
+
+    val tolls = averageSpeedAndNumberOfCars.filter(t => !(t._2 >= 40 || t._3 <= 50)).map(t => (t._1, t._3))
+      .union(accidents).keyBy(0).
+
+
+
+
+
+
+
+
+
+    warningsPerStock.union(tweetsPerStock).keyBy("symbol")
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
+        in.groupBy(_.symbol).foreach({case (_, it) =>
+          val v = (it.head.count, it.last.count)
+          out.collect(v) })
+      })
 
 
 
