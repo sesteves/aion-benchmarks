@@ -1,10 +1,15 @@
 import java.util.concurrent.TimeUnit
 
-import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
+import org.apache.flink.api.common.state.ValueStateDescriptor
+import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.windowing.time.Time
+import org.apache.flink.streaming.api.windowing.triggers.Trigger.TriggerContext
+import org.apache.flink.streaming.api.windowing.triggers.{Trigger, TriggerResult}
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow
+import org.apache.flink.util.Collector
 
 /**
   * Created by Sergio on 16/02/2017.
@@ -39,9 +44,39 @@ object LinearRoadBenchmark {
 
     val vehicleReports = rawStream.filter(_.startsWith("0")).map(VehicleReport(_))
 
+    val trigger = new Trigger[Any, TimeWindow] {
+
+      val firedOnWatermarkDescriptor =
+        new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
+
+      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        triggerContext.registerEventTimeTimer(w.maxTimestamp())
+        TriggerResult.CONTINUE
+      }
+
+      override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
+      = ???
+
+      override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+        // println(s"### onEventTime called (time: $time, window: $timeWindow)")
+
+        if (time == timeWindow.maxTimestamp) {
+          val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
+          if (firedOnWatermark.value()) {
+            TriggerResult.CONTINUE
+          } else {
+            firedOnWatermark.update(true)
+            TriggerResult.FIRE
+          }
+        } else {
+          TriggerResult.FIRE_AND_PURGE
+        }
+      }
+    }
 
     // Note that some vehicles might emit two position reports during this minute
     val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSeg, vr.speed, 1)).keyBy(0)
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
       .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3))
 
     // accident on a given segment whenever two or more vehicles are stopped
@@ -49,34 +84,33 @@ object LinearRoadBenchmark {
     // check vehicles that are stopped: when they report the same position 4 consecutive times
     // location = (absoluteSegment, lane, dir, pos)
     val stoppedVehicles = vehicleReports.keyBy("carId", "location")
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
       .fold((null: VehicleReport , 0))((acc, vr) => (vr, acc._2 + 1)).filter(_._2 >= 4).map(_._1)
 
-    val accidents = stoppedVehicles.map((_, 1)).keyBy("location").sum(1).filter(_._2 >= 2)
-      .map(p => (p._1.absoluteSeg, 0))
-
-
-
-
-    val tolls = averageSpeedAndNumberOfCars.filter(t => !(t._2 >= 40 || t._3 <= 50)).map(t => (t._1, t._3))
-      .union(accidents).keyBy(0).
-
-
-
-
-
-
-
-
-
-    warningsPerStock.union(tweetsPerStock).keyBy("symbol")
+    val accidents = stoppedVehicles.map((_, 1)).keyBy("location")
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
-      .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
-        in.groupBy(_.symbol).foreach({case (_, it) =>
-          val v = (it.head.count, it.last.count)
-          out.collect(v) })
+      .sum(1).filter(_._2 >= 2).map(p => (p._1.absoluteSeg, 0, 0))
+
+    val tolls = averageSpeedAndNumberOfCars
+      .union(accidents).keyBy(0)
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[Any]) => {
+        val it = in.iterator.toIterable
+        val toll = {
+          if (it.size == 1) {
+            if (it.head._2 > 40 || it.head._3 <= 50) {
+              0
+            } else {
+              // 2 * (numvehicles - 50)^2
+              val a = (it.head._3 - 50)
+              2 * a * a
+            }
+          } else {
+            0
+          }
+        }
+        out.collect(toll)
       })
-
-
 
     env.execute()
   }
