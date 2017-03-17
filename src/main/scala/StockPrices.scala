@@ -270,8 +270,18 @@ object StockPrices {
     val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
       .trigger(trigger)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
+
+        val startTick = System.currentTimeMillis()
+        val it = in.iterator.toIterable
         in.sliding(2).filter(it => delta(it.head.price, it.last.price))
           .map(it => out.collect(it.head.symbol, it.head.ts, it.head.dummy))
+
+        val endTick = System.currentTimeMillis()
+
+        println("### I T E R A T O R (delta): " + it.size + ", time: " + (endTick - startTick))
+
+        val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
       }
     )
 
@@ -422,10 +432,10 @@ object StockPrices {
     out.collect(cov / (d1 * d2))
 
     val endTick = System.currentTimeMillis()
-    println("### I T E R A T O R: " + it.size + ", time: " + (endTick - startTick))
+    println("### I T E R A T O R (correlation): " + it.size + ", time: " + (endTick - startTick))
 
-    val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-    pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
+//    val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+//    pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
   }
 
 //  def generateStock(symbol: String)(sigma: Int) = {
