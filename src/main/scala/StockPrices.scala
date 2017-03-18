@@ -63,12 +63,13 @@ import org.apache.flink.util.Collector
   */
 object StockPrices {
 
+  val AdditionalTupleSize = 1792
   val HostName = "localhost"
   val StocksPort = 9992
   val TweetsPort = 9993
 
   case class StockPrice(var symbol: String, var price: Double, var ts: Long,
-                        var dummy: String = "X" * additionalTupleSize) {
+                        var dummy: String = "X" * AdditionalTupleSize) {
     def this() = this(null, -1, -1)
     def setSymbol(symbol: String) = this.symbol = symbol
     def setPrice(price: Double) = this.price = price
@@ -80,7 +81,7 @@ object StockPrices {
     def getDummy = dummy
   }
 
-  case class Count(var symbol: String, var count: Int, var dummy: String = "X" * additionalTupleSize) {
+  case class Count(var symbol: String, var count: Int, var dummy: String = "X" * AdditionalTupleSize) {
     def this() = this(null, -1)
     def setSymbol(symbol: String) = this.symbol = symbol
     def setCount(count: Int) = this.count = count
@@ -103,8 +104,6 @@ object StockPrices {
   private var numberOfPastWindows: Int = _
 
   private var windowDurationMillis: Long = _
-
-  val additionalTupleSize = 1
 
   def main(args: Array[String]) {
 //    if (!parseParameters(args)) {
@@ -188,35 +187,6 @@ object StockPrices {
 
     //Step 2
     //Compute some simple statistics on a rolling window
-    val trigger = new Trigger[Any, TimeWindow] {
-
-      val firedOnWatermarkDescriptor =
-        new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
-
-      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        triggerContext.registerEventTimeTimer(w.maxTimestamp())
-        TriggerResult.CONTINUE
-      }
-
-      override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
-      = ???
-
-      override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        // println(s"### onEventTime called (time: $time, window: $timeWindow)")
-
-        if (time == timeWindow.maxTimestamp) {
-          val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
-          if (firedOnWatermark.value()) {
-            TriggerResult.CONTINUE
-          } else {
-            firedOnWatermark.update(true)
-            TriggerResult.FIRE
-          }
-        } else {
-          TriggerResult.FIRE_AND_PURGE
-        }
-      }
-    }
 
     /*
     val windowedStream = stockStream.keyBy("symbol", "price")
@@ -279,12 +249,12 @@ object StockPrices {
 //      .trigger(myDeltaTrigger).apply(sendWarning)
 
     val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
-      .trigger(trigger)
+      .trigger(new RegisterTrigger)
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[StockPrice], out: Collector[(String, Long, String)]) => {
 
         val startTick = System.currentTimeMillis()
         val it = in.iterator.toIterable
-        in.sliding(2).filter(it => delta(it.head.price, it.last.price))
+        it.sliding(2).filter(it => delta(it.head.price, it.last.price))
           .map(it => out.collect(it.head.symbol, it.head.ts, it.head.dummy))
 
         val endTick = System.currentTimeMillis()
@@ -294,7 +264,8 @@ object StockPrices {
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
       }
-    )
+      )
+
 
     // TODO check if assigned timestamps are passed across and if trigger is needed
     val warningsPerStock = priceWarnings.assignTimestampsAndWatermarks(warningPerStockAssigner)
@@ -338,7 +309,7 @@ object StockPrices {
     val mentionedSymbols = tweetStream.flatMap(_.split(' ')).map(_.toUpperCase) // .filter(symbols.contains(_))
 
     val tweetsPerStock = mentionedSymbols.map(Count(_, 1)).keyBy("symbol").timeWindow(windowDuration)
-      .allowedLateness(lateness).trigger(trigger).sum("count")
+      .allowedLateness(lateness).trigger(new DefaultTrigger()).sum("count")
 
     //Step 5
     //For advanced analysis we join the number of tweets and the number of price change warnings by stock
@@ -346,7 +317,7 @@ object StockPrices {
     //This information is used to compute rolling correlations between the tweets and the price changes
 
     val tweetsAndWarning = warningsPerStock.union(tweetsPerStock).keyBy("symbol")
-      .timeWindow(windowDuration).allowedLateness(lateness).trigger(trigger)
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger())
       .apply((key: Tuple, tw: TimeWindow, in: Iterable[Count], out: Collector[(Int, Int)]) => {
         in.groupBy(_.symbol).foreach({case (_, it) =>
           val v = (it.head.count, it.last.count)
@@ -359,46 +330,10 @@ object StockPrices {
 //          TimeUnit.SECONDS)))
 //      .apply((c1, c2) => (c1.count, c2.count))
 
-    val fireFName = s"fire-${System.currentTimeMillis()}.txt"
-    val fireAndPurgeFName = s"fire-and-purge-${System.currentTimeMillis()}.txt"
-    val trigger2 = new Trigger[Any, TimeWindow] {
-
-      val firedOnWatermarkDescriptor =
-        new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
-
-      override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        triggerContext.registerEventTimeTimer(w.maxTimestamp())
-        TriggerResult.CONTINUE
-      }
-
-      override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
-      = ???
-
-      override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
-        // println(s"### onEventTime called (time: $time, window: $timeWindow)")
-
-        if (time == timeWindow.maxTimestamp) {
-          val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
-          if (firedOnWatermark.value()) {
-            TriggerResult.CONTINUE
-          } else {
-            firedOnWatermark.update(true)
-            val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
-            pw.println(System.currentTimeMillis())
-            TriggerResult.FIRE
-          }
-        } else {
-          val pw = new PrintWriter(new FileOutputStream(new File(fireAndPurgeFName), true), true)
-          pw.println(System.currentTimeMillis())
-          // println("FIRE AND PURGE!")
-          TriggerResult.FIRE_AND_PURGE
-        }
-      }
-    }
 
     // TODO assign timestamps if needed
-    val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness).trigger(trigger2)
-      .apply(computeCorrelation)
+    val rollingCorrelation = tweetsAndWarning.timeWindowAll(windowDuration).allowedLateness(lateness)
+      .trigger(new DefaultTrigger()).apply(computeCorrelation)
 
     rollingCorrelation.print
 
@@ -476,4 +411,69 @@ object StockPrices {
 //      }
 //  }
 
+  class DefaultTrigger extends Trigger[Any, TimeWindow] {
+    val firedOnWatermarkDescriptor =
+      new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
+
+    override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+      triggerContext.registerEventTimeTimer(w.maxTimestamp())
+      TriggerResult.CONTINUE
+    }
+
+    override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
+    = ???
+
+    override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+      // println(s"### onEventTime called (time: $time, window: $timeWindow)")
+
+      if (time == timeWindow.maxTimestamp) {
+        val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
+        if (firedOnWatermark.value()) {
+          TriggerResult.CONTINUE
+        } else {
+          firedOnWatermark.update(true)
+          TriggerResult.FIRE
+        }
+      } else {
+        TriggerResult.FIRE_AND_PURGE
+      }
+    }
+  }
+
+  class RegisterTrigger extends Trigger[Any, TimeWindow] {
+    val fireFName = s"fire-${System.currentTimeMillis()}.txt"
+    val fireAndPurgeFName = s"fire-and-purge-${System.currentTimeMillis()}.txt"
+
+    val firedOnWatermarkDescriptor =
+      new ValueStateDescriptor[java.lang.Boolean]("FIRED_ON_WATERMARK", classOf[java.lang.Boolean], false)
+
+    override def onElement(t: Any, l: Long, w: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+      triggerContext.registerEventTimeTimer(w.maxTimestamp())
+      TriggerResult.CONTINUE
+    }
+
+    override def onProcessingTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult
+    = ???
+
+    override def onEventTime(time: Long, timeWindow: TimeWindow, triggerContext: TriggerContext): TriggerResult = {
+      // println(s"### onEventTime called (time: $time, window: $timeWindow)")
+
+      if (time == timeWindow.maxTimestamp) {
+        val firedOnWatermark = triggerContext.getPartitionedState(firedOnWatermarkDescriptor)
+        if (firedOnWatermark.value()) {
+          TriggerResult.CONTINUE
+        } else {
+          firedOnWatermark.update(true)
+          val pw = new PrintWriter(new FileOutputStream(new File(fireFName), true), true)
+          pw.println(System.currentTimeMillis())
+          TriggerResult.FIRE
+        }
+      } else {
+        val pw = new PrintWriter(new FileOutputStream(new File(fireAndPurgeFName), true), true)
+        pw.println(System.currentTimeMillis())
+        // println("FIRE AND PURGE!")
+        TriggerResult.FIRE_AND_PURGE
+      }
+    }
+  }
 }
