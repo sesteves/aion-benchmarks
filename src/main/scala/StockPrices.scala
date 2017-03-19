@@ -130,7 +130,7 @@ object StockPrices {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
 
     //Step 1
     //Read a stream of stock prices from different sources and union it into one stream
@@ -215,36 +215,35 @@ object StockPrices {
 
     def delta(oldPrice: Double, newPrice: Double) = Math.abs(oldPrice / newPrice - 1) > 0.05
 
-    val myDeltaTrigger = new Trigger[StockPrice, TimeWindow] {
-      val stateDesc = new ValueStateDescriptor[java.lang.Double]("last-element", classOf[java.lang.Double], null)
-
-      override def onElement(element: StockPrice, ts: Long, w: TimeWindow, ctx: TriggerContext): TriggerResult = {
-        val lastElementState = ctx.getPartitionedState(stateDesc)
-
-        if (lastElementState.value() == null) {
-          lastElementState.update(element.price)
-          TriggerResult.CONTINUE
-        } else if (delta(lastElementState.value(), element.price)) {
-          lastElementState.update(element.price)
-          return TriggerResult.FIRE
-        } else {
-          TriggerResult.CONTINUE
-        }
-      }
-
-      override def onEventTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
-        return TriggerResult.CONTINUE
-      }
-
-      override def onProcessingTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
-        return TriggerResult.CONTINUE
-      }
-
-      override def clear(window: TimeWindow, ctx: TriggerContext) = {
-        ctx.getPartitionedState(stateDesc).clear()
-      }
-    }
-
+//    val myDeltaTrigger = new Trigger[StockPrice, TimeWindow] {
+//      val stateDesc = new ValueStateDescriptor[java.lang.Double]("last-element", classOf[java.lang.Double], null)
+//
+//      override def onElement(element: StockPrice, ts: Long, w: TimeWindow, ctx: TriggerContext): TriggerResult = {
+//        val lastElementState = ctx.getPartitionedState(stateDesc)
+//
+//        if (lastElementState.value() == null) {
+//          lastElementState.update(element.price)
+//          TriggerResult.CONTINUE
+//        } else if (delta(lastElementState.value(), element.price)) {
+//          lastElementState.update(element.price)
+//          return TriggerResult.FIRE
+//        } else {
+//          TriggerResult.CONTINUE
+//        }
+//      }
+//
+//      override def onEventTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
+//        return TriggerResult.CONTINUE
+//      }
+//
+//      override def onProcessingTime(time: Long, timeWindow: TimeWindow, ctx: TriggerContext): TriggerResult = {
+//        return TriggerResult.CONTINUE
+//      }
+//
+//      override def clear(window: TimeWindow, ctx: TriggerContext) = {
+//        ctx.getPartitionedState(stateDesc).clear()
+//      }
+//    }
 //    val priceWarnings = stockStream.keyBy("symbol").timeWindow(windowDuration).allowedLateness(lateness)
 //      .trigger(myDeltaTrigger).apply(sendWarning)
 
@@ -263,8 +262,7 @@ object StockPrices {
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${it.size}")
-      }
-      )
+      })
 
 
     // TODO check if assigned timestamps are passed across and if trigger is needed
@@ -438,6 +436,10 @@ object StockPrices {
         TriggerResult.FIRE_AND_PURGE
       }
     }
+
+    override def clear(window: TimeWindow, ctx: TriggerContext) = {
+      ctx.getPartitionedState(firedOnWatermarkDescriptor).clear()
+    }
   }
 
   class RegisterTrigger extends Trigger[Any, TimeWindow] {
@@ -475,5 +477,10 @@ object StockPrices {
         TriggerResult.FIRE_AND_PURGE
       }
     }
+
+    override def clear(window: TimeWindow, ctx: TriggerContext) = {
+      ctx.getPartitionedState(firedOnWatermarkDescriptor).clear()
+    }
   }
+
 }
