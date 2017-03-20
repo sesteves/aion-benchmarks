@@ -63,7 +63,7 @@ import org.apache.flink.util.Collector
   */
 object StockPrices {
 
-  val AdditionalTupleSize = 1792
+  val AdditionalTupleSize = 1664
   val HostName = "localhost"
   val StocksPort = 9992
   val TweetsPort = 9993
@@ -110,14 +110,15 @@ object StockPrices {
 //      return
 //    }
 
-    if (args.length != 8) {
-      System.err.println("Usage: StockPrices <maxTuplesInMemory> <tuplesAfterSpillFactor> <tuplesToWatermarkThreshold> "
-        + "<complexity> <windowDurationSec> <slideDurationSec> <numberOfPastWindows> <maximumWatermarks>")
+    if (args.length != 9) {
+      System.err.println("Usage: StockPrices <useHybridBackend> <maxTuplesInMemory> <tuplesAfterSpillFactor> " +
+        "<tuplesToWatermarkThreshold> <complexity> <windowDurationSec> <slideDurationSec> <numberOfPastWindows> " +
+        "<maximumWatermarks>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec, slideDurationSec,
-    numberOfPastWindows, maxWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
-      args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
+    val (useHybridBackend, maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec,
+    slideDurationSec, numberOfPastWindows, maxWatermarks) = (args(0).toBoolean, args(1).toInt, args(2).toDouble,
+      args(3).toLong, args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt, args(8).toInt)
 
 
     val windowDuration = Time.of(windowDurationSec, TimeUnit.SECONDS)
@@ -130,8 +131,9 @@ object StockPrices {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
-    // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
-
+    if (useHybridBackend) {
+      env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    }
     //Step 1
     //Read a stream of stock prices from different sources and union it into one stream
 
