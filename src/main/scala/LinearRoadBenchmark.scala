@@ -44,7 +44,7 @@ object LinearRoadBenchmark {
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
     // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
 
-    val rawStream = env.socketTextStream("localhost", 9999)
+    val rawStream = env.socketTextStream("ginja-a5", 9999)
 
     val vehicleReportAssigner = new AssignerWithPeriodicWatermarks[VehicleReport] {
       var watermarkCount = 0
@@ -90,9 +90,9 @@ object LinearRoadBenchmark {
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .fold((null: VehicleReport , 0))((acc, vr) => (vr, acc._2 + 1)).filter(_._2 >= 4).map(_._1)
 
-    val accidents = stoppedVehicles.map((_, 1)).keyBy("location")
+    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .sum(1).filter(_._2 >= 2).map(p => (p._1.absoluteSegment, 0, 0))
+      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0))
 
     val tolls = averageSpeedAndNumberOfCars
       .union(accidents).keyBy(0)
