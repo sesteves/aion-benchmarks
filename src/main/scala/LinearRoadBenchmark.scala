@@ -3,7 +3,6 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.common.state.ValueStateDescriptor
-import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
@@ -94,56 +93,56 @@ object LinearRoadBenchmark {
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0))
 
-    /*
-    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
-      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
-        val it = in.iterator.toIterable
-        val toll = {
-          if (it.size == 1) {
-            if (it.head._2 > 40 || it.head._3 <= 50) {
-              0
-            } else {
-              // 2 * (numvehicles - 50)^2
-              2 * math.pow(it.head._3 - 50, 2)
-            }
-          } else {
-            0
-          }
-        }
-        out.collect((it.head._1, toll))
-      })
-*/
+//    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
+//      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
+//        val it = in.iterator.toIterable
+//        val toll = {
+//          if (it.size == 1) {
+//            if (it.head._2 > 40 || it.head._3 <= 50) {
+//              0
+//            } else {
+//              // 2 * (numvehicles - 50)^2
+//              2 * math.pow(it.head._3 - 50, 2)
+//            }
+//          } else {
+//            0
+//          }
+//        }
+//        out.collect((it.head._1, toll))
+//      })
 
+    val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
 
-    val tools = averageSpeedAndNumberOfCars.union(accidents)
+    val tolls = averageSpeedAndNumberOfCars.union(accidents)
       .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
+      .apply((tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
 
-        val it = in.iterator.toIterable
-
-
-
-        it.groupBy(_._1).map((absoluteSegm, it) => {
-          if (it.size == 1) {
-            if (it.head._2 > 40 || it.head._3 <= 50) {
-              0
+        val startTick = System.currentTimeMillis()
+        val iterator = in.iterator.toIterable
+        iterator.groupBy(_._1).map({ case (absoluteSegm, it) =>
+          val toll = {
+            if (it.size == 1) {
+              if (it.head._2 > 40 || it.head._3 <= 50) {
+                0
+              } else {
+                // 2 * (numvehicles - 50)^2
+                2 * math.pow(it.head._3 - 50, 2)
+              }
             } else {
-              // 2 * (numvehicles - 50)^2
-              2 * math.pow(it.head._3 - 50, 2)
+              0
             }
-          } else {
-            0
           }
-
-
+          out.collect((absoluteSegm, toll))
         })
+        val endTick = System.currentTimeMillis()
 
+        println("### I T E R A T O R : " + iterator.size + ", time: " + (endTick - startTick))
 
+        val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${iterator.size}")
 
-      }
-
-
+      })
 
     tolls.print()
 
