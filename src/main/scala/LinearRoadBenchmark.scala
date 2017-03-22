@@ -88,16 +88,16 @@ object LinearRoadBenchmark {
     // location = (absoluteSegment, lane, dir, pos)
     val stoppedVehicles = vehicleReports.keyBy("carId", "location")
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .fold((null: VehicleReport , 0))((acc, vr) => (vr, acc._2 + 1)).filter(_._2 >= 4).map(_._1)
+      .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
 
     val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0))
 
-    val tolls = averageSpeedAndNumberOfCars
-      .union(accidents).keyBy(0)
+    /*
+    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[Double]) => {
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
         val it = in.iterator.toIterable
         val toll = {
           if (it.size == 1) {
@@ -111,8 +111,41 @@ object LinearRoadBenchmark {
             0
           }
         }
-        out.collect(toll)
+        out.collect((it.head._1, toll))
       })
+*/
+
+
+    val tools = averageSpeedAndNumberOfCars.union(accidents)
+      .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
+
+        val it = in.iterator.toIterable
+
+
+
+        it.groupBy(_._1).map((absoluteSegm, it) => {
+          if (it.size == 1) {
+            if (it.head._2 > 40 || it.head._3 <= 50) {
+              0
+            } else {
+              // 2 * (numvehicles - 50)^2
+              2 * math.pow(it.head._3 - 50, 2)
+            }
+          } else {
+            0
+          }
+
+
+        })
+
+
+
+      }
+
+
+
+    tolls.print()
 
     env.execute()
   }
