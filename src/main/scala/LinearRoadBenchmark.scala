@@ -78,7 +78,7 @@ object LinearRoadBenchmark {
       .assignTimestampsAndWatermarks(vehicleReportAssigner)
 
     // Note that some vehicles might emit two position reports during this minute
-    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSeg, vr.speed, 1)).keyBy(0)
+    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3))
 
@@ -92,12 +92,12 @@ object LinearRoadBenchmark {
 
     val accidents = stoppedVehicles.map((_, 1)).keyBy("location")
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .sum(1).filter(_._2 >= 2).map(p => (p._1.absoluteSeg, 0, 0))
+      .sum(1).filter(_._2 >= 2).map(p => (p._1.absoluteSegment, 0, 0))
 
     val tolls = averageSpeedAndNumberOfCars
       .union(accidents).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[Any]) => {
+      .apply((key: Tuple, tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[Double]) => {
         val it = in.iterator.toIterable
         val toll = {
           if (it.size == 1) {
@@ -117,14 +117,17 @@ object LinearRoadBenchmark {
     env.execute()
   }
 
-  case class VehicleReport(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int) {
-    val absoluteSeg = xway * MaxSegment + seg
-    val location = (absoluteSeg, lane, pos)
-  }
+  case class VehicleReport(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int,
+                           absoluteSegment: Int, location: (Int, Int, Int))
   object VehicleReport {
+    def apply(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int): VehicleReport = {
+      val absoluteSeg = xway * MaxSegment + seg
+      val location = (absoluteSeg, lane, pos)
+      VehicleReport(time, carId, speed, xway, lane, dir, seg, pos, absoluteSeg, location)
+    }
     def apply(str: String): VehicleReport = {
       val el = str.split(',')
-      VehicleReport(el(0).toLong, el(1).toInt, el(2).toInt, el(3).toInt, el(4).toInt, el(5).toInt, el(6).toInt,
+      this(el(0).toLong, el(1).toInt, el(2).toInt, el(3).toInt, el(4).toInt, el(5).toInt, el(6).toInt,
         el(7).toInt)
     }
   }
