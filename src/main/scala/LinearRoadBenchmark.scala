@@ -74,7 +74,7 @@ object LinearRoadBenchmark {
       }
     }
 
-    val vehicleReports = rawStream.filter(_.startsWith("0")).map(VehicleReport(_))
+    val vehicleReports = rawStream.filter(_.startsWith("0")).map(line => VehicleReport(line.substring(2)))
       .assignTimestampsAndWatermarks(vehicleReportAssigner)
 
     // Note that some vehicles might emit two position reports during this minute
