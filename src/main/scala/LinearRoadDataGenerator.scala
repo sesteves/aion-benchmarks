@@ -54,7 +54,7 @@ object LinearRoadDataGenerator {
 
           val endTick = System.nanoTime()
           val diff = endTick - startTick
-          val waitNanos = 1000000000 / ingestionRate - diff
+          val waitNanos = 1000000000 / ingestionRate * lFactor - diff
 
           while (waitNanos > 0 && System.nanoTime() - endTick < waitNanos) {
             // do nothing
@@ -64,7 +64,6 @@ object LinearRoadDataGenerator {
       } catch {
         case _: SocketException =>
           println("Client disconnected")
-          out.close()
           socket.close()
       }
     }

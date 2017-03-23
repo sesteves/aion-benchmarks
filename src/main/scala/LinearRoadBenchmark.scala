@@ -19,6 +19,7 @@ import org.apache.flink.util.Collector
   */
 object LinearRoadBenchmark {
 
+  val AdditionalTupleSize = 2048
   val MaxSegment = 100
 
   def main(args: Array[String]): Unit = {
@@ -150,7 +151,7 @@ object LinearRoadBenchmark {
   }
 
   case class VehicleReport(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int,
-                           absoluteSegment: Int, location: (Int, Int, Int))
+                           absoluteSegment: Int, location: (Int, Int, Int), dummy: String = "X" * AdditionalTupleSize)
   object VehicleReport {
     def apply(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int): VehicleReport = {
       val absoluteSeg = xway * MaxSegment + seg
