@@ -78,9 +78,9 @@ object LinearRoadBenchmark {
       .assignTimestampsAndWatermarks(vehicleReportAssigner)
 
     // Note that some vehicles might emit two position reports during this minute
-    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
+    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1, vr.dummy)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3))
+      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3, a._4)).map(t => (t._1, t._2 / t._3, t._3, t._4))
 
     // accident on a given segment whenever two or more vehicles are stopped
     // in that segment at the same lane and position.
@@ -90,9 +90,9 @@ object LinearRoadBenchmark {
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
 
-    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
+    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0))
+      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, t._4))
 
 //    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
 //      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
@@ -117,7 +117,7 @@ object LinearRoadBenchmark {
 
     val tolls = averageSpeedAndNumberOfCars.union(accidents)
       .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
+      .apply((tw: TimeWindow, in: Iterable[(Int, Int, Int, String)], out: Collector[(Int, Double)]) => {
 
         val startTick = System.currentTimeMillis()
         val iterator = in.iterator.toIterable
