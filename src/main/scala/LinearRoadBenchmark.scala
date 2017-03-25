@@ -43,8 +43,9 @@ object LinearRoadBenchmark {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
-
+    if (useHybridBackend) {
+      env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    }
     val rawStream = env.socketTextStream("ginja-a5", 9999)
 
     val vehicleReportAssigner = new AssignerWithPeriodicWatermarks[VehicleReport] {
