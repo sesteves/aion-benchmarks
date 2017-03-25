@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.commons.math3.distribution.LogNormalDistribution
 import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.scala._
+import org.apache.flink.runtime.state.hybrid.MemoryFsStateBackend
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
@@ -42,7 +43,7 @@ object LinearRoadBenchmark {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
-    // env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
 
     val rawStream = env.socketTextStream("ginja-a5", 9999)
 
