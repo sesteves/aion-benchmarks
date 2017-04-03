@@ -173,13 +173,38 @@ object LinearRoadBenchmark {
 
       })
 
-    tolls.print()
+    // tolls.print()
 
     env.execute()
   }
 
-  case class VehicleReport(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int,
-                           absoluteSegment: Int, location: (Int, Int, Int), dummy: String = "X" * AdditionalTupleSize)
+  case class VehicleReport(var time: Long, var carId: Int, var speed: Int, var xway: Int, var lane: Int, var dir: Int,
+                           var seg: Int, var pos: Int, var absoluteSegment: Int, var location: (Int, Int, Int),
+                           var dummy: String = "X" * AdditionalTupleSize) {
+    def this() = this(-1, -1, -1, -1, -1, -1, -1, -1, -1, (-1, -1, -1))
+    def setTime(time: Long) = this.time = time
+    def setCarId(carId: Int) = this.carId = carId
+    def setSpeed(speed: Int) = this.speed = speed
+    def setXway(xway: Int) = this.xway = xway
+    def setLane(lane: Int) = this.lane = lane
+    def setDir(dir: Int) = this.dir = dir
+    def setSeg(seg: Int) = this.seg = seg
+    def setPos(pos: Int) = this.pos = pos
+    def setAbsoluteSegment(absoluteSegment: Int) = this.absoluteSegment = absoluteSegment
+    def setLocation(location: (Int, Int, Int)) = this.location = location
+    def setDummy(dummy: String) = this.dummy = dummy
+    def getTime = time
+    def getCarId = carId
+    def getSpeed = speed
+    def getXway = xway
+    def getLane = lane
+    def getDir = dir
+    def getSeg = seg
+    def getPos = pos
+    def getAbsoluteSegment = absoluteSegment
+    def getLocation = location
+    def getDummy = dummy
+  }
   object VehicleReport {
     def apply(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int): VehicleReport = {
       val absoluteSeg = xway * MaxSegment + seg
