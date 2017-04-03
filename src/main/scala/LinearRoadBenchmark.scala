@@ -80,41 +80,46 @@ object LinearRoadBenchmark {
       .assignTimestampsAndWatermarks(vehicleReportAssigner)
 
     // Note that some vehicles might emit two position reports during this minute
-    // with dummy
-//    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1, vr.dummy)).keyBy(0)
-//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-//      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3, a._4)).map(t => (t._1, t._2 / t._3, t._3, t._4))
-
-    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
+    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1, vr.dummy)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3, "X" * AdditionalTupleSize))
+      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3, a._4)).map(t => (t._1, t._2 / t._3, t._3, t._4))
+
+    // without dummy payload
+//    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+//      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3, "X" * AdditionalTupleSize))
 
 
     // accident on a given segment whenever two or more vehicles are stopped
     // in that segment at the same lane and position.
     // check vehicles that are stopped: when they report the same position 4 consecutive times
     // location = (absoluteSegment, lane, dir, pos)
-    val stoppedVehicles = vehicleReports.keyBy("carId", "location")
-      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
+//    val stoppedVehicles = vehicleReports.keyBy("carId", "location")
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+//      .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
 
     val stoppedVehicles = vehicleReports
       .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .apply((tw: TimeWindow, in: Iterable[VehicleReport], out: Collector[VehicleReport]) =>
+      .apply((tw: TimeWindow, in: Iterable[VehicleReport], out: Collector[VehicleReport]) => {
+
+        val startTick = System.currentTimeMillis()
+        val iterator = in.iterator.toIterable
         in.groupBy(vr => vr.carId.toString + vr.location.toString).filter(_._2.size >= 4)
           .map(p => out.collect(p._2.head))
-      )
-      //.fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
+        val endTick = System.currentTimeMillis()
 
+        println("### I T E R A T O R (stopped vehicles): " + iterator.size + ", time: " + (endTick - startTick))
 
-    // with dummy
-//    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
-//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-//      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, t._4))
+      })
 
-    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
+    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, "X" * AdditionalTupleSize))
+      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, t._4))
+
+    // without dummy payload
+//    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+//      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, "X" * AdditionalTupleSize))
 
 
     //    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
@@ -161,7 +166,7 @@ object LinearRoadBenchmark {
         })
         val endTick = System.currentTimeMillis()
 
-        println("### I T E R A T O R : " + iterator.size + ", time: " + (endTick - startTick))
+        println("### I T E R A T O R (tolls): " + iterator.size + ", time: " + (endTick - startTick))
 
         val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
         pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${iterator.size}")
@@ -174,7 +179,7 @@ object LinearRoadBenchmark {
   }
 
   case class VehicleReport(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int,
-                           absoluteSegment: Int, location: (Int, Int, Int))//, dummy: String = "X" * AdditionalTupleSize)
+                           absoluteSegment: Int, location: (Int, Int, Int), dummy: String = "X" * AdditionalTupleSize)
   object VehicleReport {
     def apply(time: Long, carId: Int, speed: Int, xway: Int, lane: Int, dir: Int, seg: Int, pos: Int): VehicleReport = {
       val absoluteSeg = xway * MaxSegment + seg
