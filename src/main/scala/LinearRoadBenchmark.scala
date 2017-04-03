@@ -98,6 +98,15 @@ object LinearRoadBenchmark {
       .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
       .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
 
+    val stoppedVehicles = vehicleReports
+      .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+      .apply((tw: TimeWindow, in: Iterable[VehicleReport], out: Collector[VehicleReport]) =>
+        in.groupBy(vr => vr.carId.toString + vr.location.toString).filter(_._2.size >= 4)
+          .map(p => out.collect(p._2.head))
+      )
+      //.fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
+
+
     // with dummy
 //    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
 //      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
