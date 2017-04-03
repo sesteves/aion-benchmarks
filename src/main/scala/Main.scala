@@ -41,7 +41,7 @@ object Main {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(slideDurationMillis)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, numberOfPastWindows, tuplesAfterSpillFactor, 5))
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 

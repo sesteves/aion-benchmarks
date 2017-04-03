@@ -132,7 +132,7 @@ object StockPrices {
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(windowDurationSec * 1000)
     if (useHybridBackend) {
-      env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, tuplesAfterSpillFactor, 5))
+      env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, numberOfPastWindows, tuplesAfterSpillFactor, 5))
     }
     //Step 1
     //Read a stream of stock prices from different sources and union it into one stream
