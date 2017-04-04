@@ -106,7 +106,7 @@ object LinearRoadBenchmark {
 
         val startTick = System.currentTimeMillis()
         val iterator = in.iterator.toIterable
-        in.groupBy(vr => vr.carId.toString + vr.location.toString).filter(_._2.size >= 4)
+        iterator.groupBy(vr => vr.carId.toString + vr.location.toString).filter(_._2.size >= 4)
           .map(p => out.collect(p._2.head))
         val endTick = System.currentTimeMillis()
 
