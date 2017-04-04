@@ -80,14 +80,14 @@ object LinearRoadBenchmark {
       .assignTimestampsAndWatermarks(vehicleReportAssigner)
 
     // Note that some vehicles might emit two position reports during this minute
-    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1, vr.dummy)).keyBy(0)
-      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3, a._4)).map(t => (t._1, t._2 / t._3, t._3, t._4))
+//    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1, vr.dummy)).keyBy(0)
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+//      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3, a._4)).map(t => (t._1, t._2 / t._3, t._3, t._4))
 
     // without dummy payload
-//    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
-//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-//      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3, "X" * AdditionalTupleSize))
+    val averageSpeedAndNumberOfCars = vehicleReports.map(vr => (vr.absoluteSegment, vr.speed, 1)).keyBy(0)
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+      .reduce((a, b) => (a._1, a._2 + b._2, a._3 + b._3)).map(t => (t._1, t._2 / t._3, t._3))
 
 
     // accident on a given segment whenever two or more vehicles are stopped
@@ -97,6 +97,8 @@ object LinearRoadBenchmark {
 //    val stoppedVehicles = vehicleReports.keyBy("carId", "location")
 //      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
 //      .fold((None: Option[VehicleReport], 0))((acc, vr) => (Some(vr), acc._2 + 1)).filter(_._2 >= 4).map(_._1.get)
+
+    val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
 
     val stoppedVehicles = vehicleReports
       .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
@@ -110,16 +112,18 @@ object LinearRoadBenchmark {
 
         println("### I T E R A T O R (stopped vehicles): " + iterator.size + ", time: " + (endTick - startTick))
 
+        val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
+        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${iterator.size}")
       })
 
-    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
-      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, t._4))
+//    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1, vr.dummy)).keyBy(0)
+//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+//      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, t._4))
 
     // without dummy payload
-//    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
-//      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
-//      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0, "X" * AdditionalTupleSize))
+    val accidents = stoppedVehicles.map(vr => (vr.location, vr.absoluteSegment, 1)).keyBy(0)
+      .timeWindow(windowDuration).allowedLateness(lateness).trigger(new DefaultTrigger)
+      .sum(2).filter(_._3 >= 2).map(t => (t._2, 0, 0))
 
 
     //    val tolls = averageSpeedAndNumberOfCars.union(accidents).keyBy(0)
@@ -141,11 +145,9 @@ object LinearRoadBenchmark {
 //        out.collect((it.head._1, toll))
 //      })
 
-    val computeStartFName = s"compute-time-${System.currentTimeMillis()}.txt"
-
     val tolls = averageSpeedAndNumberOfCars.union(accidents)
       .timeWindowAll(windowDuration).allowedLateness(lateness).trigger(new RegisterTrigger)
-      .apply((tw: TimeWindow, in: Iterable[(Int, Int, Int, String)], out: Collector[(Int, Double)]) => {
+      .apply((tw: TimeWindow, in: Iterable[(Int, Int, Int)], out: Collector[(Int, Double)]) => {
 
         val startTick = System.currentTimeMillis()
         val iterator = in.iterator.toIterable
@@ -167,10 +169,6 @@ object LinearRoadBenchmark {
         val endTick = System.currentTimeMillis()
 
         println("### I T E R A T O R (tolls): " + iterator.size + ", time: " + (endTick - startTick))
-
-        val pw = new PrintWriter(new FileOutputStream(new File(computeStartFName), true), true)
-        pw.println(s"${tw.maxTimestamp()},$startTick,$endTick,${iterator.size}")
-
       })
 
     // tolls.print()
