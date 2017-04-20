@@ -27,21 +27,24 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length != 8) {
-      System.err.println("Usage: Main <maxTuplesInMemory> <tuplesAfterSpillFactor> <tuplesToWatermarkThreshold> <complexity> " +
-        "<windowDurationSec> <slideDurationSec> <numberOfPastWindows> <maximumWatermarks>")
+    if (args.length != 9) {
+      System.err.println("Usage: Main <useHybridBackend> <maxTuplesInMemory> <tuplesAfterSpillFactor> " +
+        "<tuplesToWatermarkThreshold> <complexity> <windowDurationSec> <slideDurationSec> <numberOfPastWindows> " +
+        "<maximumWatermarks>")
       System.exit(1)
     }
-    val (maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec, slideDurationSec,
-    numberOfPastWindows, maximumWatermarks) = (args(0).toInt, args(1).toDouble, args(2).toLong, args(3).toInt,
-      args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt)
+    val (useHybridBackend, maxTuplesInMemory, tuplesAfterSpillFactor, tuplesWkThreshold, complexity, windowDurationSec,
+    slideDurationSec, numberOfPastWindows, maxWatermarks) = (args(0).toBoolean, args(1).toInt, args(2).toDouble,
+      args(3).toLong, args(4).toInt, args(5).toInt, args(6).toInt, args(7).toInt, args(8).toInt)
 
     val slideDurationMillis = TimeUnit.SECONDS.toMillis(slideDurationSec)
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.getConfig.setAutoWatermarkInterval(slideDurationMillis)
-    env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, numberOfPastWindows, tuplesAfterSpillFactor, 5))
+    if(useHybridBackend) {
+      env.setStateBackend(new MemoryFsStateBackend(maxTuplesInMemory, numberOfPastWindows, tuplesAfterSpillFactor, 5))
+    }
     // env.setStateBackend(new FsStateBackend("hdfs://ginja-a1:9000/flink/checkpoints"));
 
 
@@ -66,7 +69,7 @@ object Main {
       if (complexity == 1) {
 
         rawStream.filter(!_.isEmpty).assignTimestampsAndWatermarks(
-            new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maximumWatermarks))
+            new PeriodicAssigner[String](slideDurationMillis, numberOfPastWindows, maxWatermarks))
           .map(s => (s + " " + "X" * additionalTupleSize, 1))
       } else {
 
@@ -75,7 +78,7 @@ object Main {
           (p1, p2.toInt, p3.toLong)
         })
           .assignTimestampsAndWatermarks(new PeriodicAssigner[(String, Int, Long)](slideDurationMillis,
-            numberOfPastWindows, maximumWatermarks))
+            numberOfPastWindows, maxWatermarks))
           .map(tuple => (tuple._1, tuple._2))
       }
 
